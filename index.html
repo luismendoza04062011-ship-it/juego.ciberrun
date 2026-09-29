@@ -1,0 +1,3242 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>CyberRun: Escape de Bogotá 2080</title>
+  <meta name="description" content="CyberRun es una carrera pseudo-3D en Bogotá 2080 con tres misiones: tutorial, desafío medio y supervivencia final." />
+  <meta property="og:title" content="CyberRun: Escape de Bogotá 2080" />
+  <meta property="og:description" content="Tres misiones de carrera pseudo-3D en Bogotá 2080: tutorial, desafío medio y supervivencia final." />
+  
+  <!-- Google Fonts: Orbitron & Chakra Petch & Share Tech Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,400;0,600;0,700;1,700&family=Orbitron:wght@500;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            cyber: ['Orbitron', 'sans-serif'],
+            tech: ['"Chakra Petch"', 'sans-serif'],
+            mono: ['"Share Tech Mono"', 'monospace']
+          },
+          colors: {
+            cyber: {
+              cyan: '#00f0ff',
+              magenta: '#ff0055',
+              yellow: '#ffe600',
+              purple: '#b026ff',
+              dark: '#05070f'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Firebase COMPAT: perfil de jugador y ranking en tiempo real -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+  <style>
+    * {
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      box-sizing: border-box;
+    }
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #05070f;
+    }
+    .scanlines {
+      background: linear-gradient(
+        rgba(18, 16, 16, 0) 50%,
+        rgba(0, 0, 0, 0.35) 50%
+      ), linear-gradient(
+        90deg,
+        rgba(255, 0, 0, 0.03),
+        rgba(0, 255, 0, 0.01),
+        rgba(0, 0, 255, 0.03)
+      );
+      background-size: 100% 3px, 4px 100%;
+      pointer-events: none;
+    }
+    .neon-text-cyan {
+      text-shadow: 0 0 8px rgba(0, 240, 255, 0.7), 0 0 16px rgba(0, 240, 255, 0.4);
+    }
+    .neon-text-magenta {
+      text-shadow: 0 0 8px rgba(255, 0, 85, 0.8), 0 0 16px rgba(255, 0, 85, 0.4);
+    }
+    .neon-border-cyan {
+      box-shadow: 0 0 12px rgba(0, 240, 255, 0.3), inset 0 0 8px rgba(0, 240, 255, 0.2);
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #0d111a;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #00f0ff;
+      border-radius: 3px;
+    }
+    @keyframes pulseWarning {
+      0%, 100% { opacity: 0.3; transform: scale(1); }
+      50% { opacity: 0.8; transform: scale(1.02); }
+    }
+    .drone-alert-active {
+      animation: pulseWarning 0.8s infinite;
+    }
+    #mediaOverlay {
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.35s ease, visibility 0.35s ease;
+    }
+    #mediaOverlay:not(.hidden) {
+      opacity: 1;
+      visibility: visible;
+    }
+    #mediaOverlay #mediaBackdrop {
+      background: radial-gradient(circle at center, rgba(0,0,0,0.35), rgba(0,0,0,0.8) 55%, rgba(0,0,0,0.96));
+      backdrop-filter: blur(2px);
+    }
+    #storyImage {
+      object-fit: cover;
+    }
+    #storyVideo {
+      /* Muestra todo el encuadre del vídeo, sin recortar los laterales. */
+      object-fit: contain;
+      background: #000;
+    }
+    #storyImage, #storyVideo {
+      filter: saturate(1.2) contrast(1.08);
+    }
+    #mediaCaption {
+      letter-spacing: 0.25em;
+      backdrop-filter: blur(6px);
+      animation: mediaCaptionPulse 1.6s ease-in-out infinite alternate;
+    }
+    @keyframes mediaCaptionPulse {
+      0% { transform: translateX(-50%) scale(0.98); opacity: 0.7; }
+      100% { transform: translateX(-50%) scale(1); opacity: 1; }
+    }
+  </style>
+</head>
+<body class="bg-neutral-950 text-neutral-100 font-tech overflow-hidden select-none">
+
+  <!-- CONTENEDOR PRINCIPAL DEL JUEGO -->
+  <div id="gameContainer" class="relative w-screen h-screen overflow-hidden flex flex-col items-center justify-center">
+    
+    <!-- CANVAS NATIVO 2D (PSEUDO-3D RUNNER) -->
+    <canvas id="gameCanvas" class="w-full h-full block bg-black"></canvas>
+    
+    <!-- EFECTO RETRO MONITOR CRT / SCANLINES -->
+    <div class="scanlines absolute inset-0 z-10 pointer-events-none"></div>
+
+    <!-- PANTALLA DE INICIO (START SCREEN) -->
+    <div id="startScreen" class="absolute inset-0 z-30 flex items-center justify-center overflow-y-auto p-4 bg-neutral-950/80 backdrop-blur-sm transition-all duration-300">
+      <div class="w-full min-w-0 max-w-lg my-auto flex flex-col items-center text-center p-4 sm:p-6 rounded-2xl bg-neutral-900/90 border border-cyan-500/40 shadow-2xl shadow-cyan-950/50">
+        
+        <!-- Insignia Superior -->
+        <div class="max-w-full flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-950/80 border border-cyan-500/60 text-cyan-300 text-[10px] sm:text-xs font-cyber tracking-normal sm:tracking-widest uppercase mb-3">
+          <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+          <span>3 MISIONES · ESCAPE DE BOGOTÁ</span>
+        </div>
+
+        <!-- Título Bogotano Futurista -->
+        <h1 class="text-3xl sm:text-5xl font-cyber font-black tracking-wider text-white mb-2 uppercase">
+          <span class="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-teal-300 to-emerald-400 neon-text-cyan">
+            CYBERRUN
+          </span>
+          <span class="block text-lg sm:text-2xl text-rose-500 font-extrabold mt-1 tracking-wide sm:tracking-widest neon-text-magenta">
+            ESCAPE DE BOGOTÁ 2080
+          </span>
+        </h1>
+
+        <p class="text-xs sm:text-sm text-neutral-300 max-w-md mb-5 leading-relaxed font-tech">
+          Corre por la autopista elevada esquivando <strong class="text-rose-400">TransMilenios voladores</strong>, 
+          <strong class="text-amber-400">taxis gravitacionales</strong> y <strong class="text-cyan-400">barreras policiales de neón</strong> 
+          mientras huyes del implacable <strong class="text-rose-400">Dron de Seguridad POL-METRO</strong>.
+        </p>
+
+        <!-- 3 Puntos Clave del Diseño -->
+        <div class="w-full grid grid-cols-3 gap-2 mb-6 text-[11px] font-cyber">
+          <div class="min-w-0 p-2 rounded-xl bg-neutral-950/80 border border-rose-900/60 flex flex-col items-center">
+            <span class="text-rose-400 font-bold text-sm">DRON</span>
+            <span class="text-neutral-300 text-[9px] sm:text-[10px] break-words">Persecución Activa</span>
+          </div>
+          <div class="min-w-0 p-2 rounded-xl bg-neutral-950/80 border border-amber-900/60 flex flex-col items-center">
+            <span class="text-amber-400 font-bold text-sm">INFLACIÓN</span>
+            <span class="text-neutral-300 text-[9px] sm:text-[10px] break-words">Costo Resurrección</span>
+          </div>
+          <div class="min-w-0 p-2 rounded-xl bg-neutral-950/80 border border-cyan-900/60 flex flex-col items-center">
+            <span class="text-cyan-400 font-bold text-sm">2D A 60FPS</span>
+            <span class="text-neutral-300 text-[9px] sm:text-[10px] break-words">Colegios / Web</span>
+          </div>
+        </div>
+
+        <!-- PERFIL DEL JUGADOR / FIRESTORE -->
+        <div class="w-full mb-4 p-3 rounded-xl bg-neutral-950/80 border border-cyan-500/30 text-left">
+          <div class="flex items-center justify-between gap-2 mb-2">
+            <label for="nicknameInput" class="font-cyber text-[10px] tracking-wider text-cyan-300">IDENTIDAD DEL CORREDOR</label>
+            <span id="profileStatus" class="text-[9px] font-mono text-neutral-500">Ingresa tu nickname</span>
+          </div>
+          <div class="flex gap-2">
+            <input id="nicknameInput" type="text" maxlength="20" autocomplete="nickname" placeholder="Nickname" class="min-w-0 flex-1 px-3 py-2 rounded-lg bg-neutral-900 border border-neutral-700 text-sm text-white font-mono placeholder:text-neutral-600 outline-none focus:border-cyan-400 select-text" aria-label="Nickname del jugador" />
+            <button id="btnLoadProfile" class="shrink-0 px-3 py-2 rounded-lg bg-cyan-950 hover:bg-cyan-900 border border-cyan-500/50 text-cyan-300 font-cyber text-[10px] font-bold cursor-pointer">
+              CARGAR
+            </button>
+          </div>
+          <div class="grid grid-cols-4 gap-1.5 mt-2 text-center font-mono text-[9px]">
+            <div><span class="block text-neutral-500">RANGO LVL</span><span id="profileLevel" class="text-emerald-300 font-bold">1</span></div>
+            <div><span class="block text-neutral-500">MONEDAS</span><span id="profileCoins" class="text-amber-300 font-bold">0</span></div>
+            <div><span class="block text-neutral-500">RANGO</span><span id="profileRank" class="text-amber-300 font-bold">Aprendiz</span></div>
+            <div><span class="block text-neutral-500">RÉCORD</span><span id="profileHighScore" class="text-cyan-300 font-bold">0 m</span></div>
+          </div>
+        </div>
+
+        <!-- Selección de misiones -->
+        <div class="w-full mb-4 text-left">
+          <p class="font-cyber text-[10px] tracking-widest text-cyan-300 mb-2">MISIONES DEL ESCAPE</p>
+          <div id="missionSelector" class="grid grid-cols-1 sm:grid-cols-3 gap-2"></div>
+        </div>
+
+        <!-- Botones Principales -->
+        <div class="w-full flex flex-col gap-3">
+          <button id="btnStartGame" class="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-cyan-500 via-teal-400 to-emerald-400 hover:from-cyan-400 hover:to-emerald-300 text-neutral-950 font-cyber font-black text-lg tracking-wider shadow-lg shadow-cyan-500/30 transition-transform active:scale-95 cursor-pointer">
+            ► INICIAR MISIÓN 1
+          </button>
+
+          <div class="grid grid-cols-2 gap-3 font-cyber text-xs">
+            <button id="btnOpenFicha" class="py-3 px-3 rounded-lg bg-indigo-950/90 hover:bg-indigo-900 border border-indigo-500/50 text-indigo-200 font-bold tracking-wider transition-colors cursor-pointer">
+              📄 FICHA TÉCNICA
+            </button>
+            <button id="btnOpenShop" class="py-3 px-3 rounded-lg bg-neutral-950/90 hover:bg-neutral-800 border border-neutral-700 text-neutral-200 font-bold tracking-wider transition-colors cursor-pointer">
+              🛒 TIENDA HACK (<span id="shopKeyCountLabel">0</span>)
+            </button>
+          </div>
+          <button id="btnOpenRanking" class="w-full py-2.5 px-3 rounded-lg bg-amber-950/70 hover:bg-amber-900 border border-amber-500/50 text-amber-300 font-cyber text-xs font-bold tracking-wider transition-colors cursor-pointer">
+            🏆 RANKING
+          </button>
+        </div>
+
+        <!-- Controles & Audio Info -->
+        <div class="mt-4 flex items-center justify-between w-full text-xs text-neutral-400 font-mono">
+          <span class="hidden sm:inline">Teclas: [A][D] Carril • [W]/[Espacio] Salto • [S] Deslizar</span>
+          <button id="btnToggleMuteStart" class="ml-auto text-cyan-400 hover:underline cursor-pointer">
+            🔊 Sonido: ON
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- OVERLAY DE IMÁGENES Y VIDEOS DE MOMENTO -->
+    <div id="mediaOverlay" class="absolute inset-0 z-35 hidden pointer-events-none">
+      <div id="mediaBackdrop" class="absolute inset-0 bg-black/80"></div>
+      <img id="storyImage" class="absolute inset-0 w-full h-full object-cover hidden" alt="Escena del videojuego" />
+      <video id="storyVideo" class="absolute inset-0 w-full h-full object-cover hidden" playsinline preload="auto"></video>
+      <div id="mediaCaption" class="absolute bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full border border-cyan-400/40 bg-black/55 text-cyan-200 text-[10px] sm:text-xs font-cyber tracking-[0.25em] uppercase hidden"></div>
+    </div>
+
+    <!-- HUD SUPERIOR EN PARTIDA -->
+    <div id="gameHUD" class="absolute top-0 left-0 right-0 z-20 p-3 sm:p-5 pointer-events-none hidden flex flex-col gap-2">
+      <div id="hudMissionPanel" class="w-full max-w-xl mx-auto px-3 py-2 rounded-lg bg-neutral-950/85 border border-cyan-500/50 text-center backdrop-blur-md">
+        <div class="flex justify-between gap-2 text-[10px] font-cyber tracking-wider">
+          <span id="hudMissionName" class="text-cyan-300">MISIÓN 1 · INTRODUCCIÓN</span>
+          <span id="hudMissionProgress" class="text-emerald-300">0 / 500 m</span>
+        </div>
+        <p id="hudMissionObjective" class="text-[10px] sm:text-xs text-neutral-200 font-mono mt-1">Aprende a moverte, saltar y deslizarte.</p>
+        <div class="h-1.5 bg-neutral-800 rounded-full overflow-hidden mt-2">
+          <div id="hudMissionBar" class="h-full bg-gradient-to-r from-cyan-400 to-emerald-400" style="width: 0%"></div>
+        </div>
+      </div>
+      <div class="w-full flex items-start justify-between">
+        
+        <!-- Panel Izquierdo: Distancia y Velocidad -->
+        <div class="flex flex-col gap-1">
+          <div class="flex items-baseline gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-900/80 border border-neutral-700 backdrop-blur-md">
+            <span class="text-[10px] font-cyber tracking-wider text-neutral-400">DISTANCIA:</span>
+            <span id="hudDistance" class="font-cyber font-black text-cyan-300 text-base sm:text-xl">0</span>
+            <span class="text-[10px] font-mono text-neutral-400">m</span>
+          </div>
+          <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-neutral-900/60 border border-neutral-800 w-fit">
+            <span class="text-[9px] font-mono text-neutral-400">VELOCIDAD:</span>
+            <span id="hudSpeed" class="font-mono font-bold text-emerald-400 text-xs sm:text-sm">70</span>
+            <span class="text-[9px] font-mono text-neutral-400">km/h</span>
+          </div>
+        </div>
+
+        <!-- Panel Centro: Alerta Dron Policial de Persecución (Toque Secreto) -->
+        <div id="hudDroneAlert" class="flex flex-col items-center px-3 py-1.5 rounded-lg bg-neutral-900/80 border border-rose-600/50 backdrop-blur-md">
+          <div class="flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+            <span class="font-cyber text-[10px] sm:text-xs tracking-wider text-rose-400 font-bold">DRON POL-METRO</span>
+          </div>
+          <!-- Barra de proximidad del Dron -->
+          <div class="w-28 sm:w-36 h-2 bg-neutral-800 rounded-full overflow-hidden mt-1 border border-neutral-700">
+            <div id="hudDroneBar" class="h-full bg-gradient-to-r from-emerald-500 via-amber-500 to-rose-500 transition-all duration-200" style="width: 25%;"></div>
+          </div>
+          <span id="hudDroneStatus" class="text-[9px] font-mono text-neutral-300 mt-0.5">VIGILANCIA DISTANTE</span>
+        </div>
+
+        <!-- Panel Derecho: Llaves de Hack y Cripto-Pesos -->
+        <div class="flex flex-col items-end gap-1 pointer-events-auto">
+          <div class="flex items-center gap-2">
+            <!-- Cripto-Pesos -->
+            <div class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-900/80 border border-amber-500/40 backdrop-blur-md">
+              <span class="text-amber-400 font-cyber font-bold text-xs">₧</span>
+              <span id="hudCoins" class="font-cyber font-bold text-amber-300 text-sm sm:text-base">0</span>
+            </div>
+            <!-- Llaves de Hackeo -->
+            <div class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-900/80 border border-cyan-500/40 backdrop-blur-md">
+              <span class="text-cyan-400 text-xs">🔑</span>
+              <span id="hudKeys" class="font-cyber font-bold text-cyan-300 text-sm sm:text-base">0</span>
+            </div>
+          </div>
+
+          <!-- Botones de Control Rápido -->
+          <div class="flex items-center gap-1.5 mt-1">
+            <button id="btnHudMute" class="px-2 py-1 rounded bg-neutral-900/70 border border-neutral-700 hover:border-cyan-400 text-xs text-neutral-300 cursor-pointer">
+              🔊
+            </button>
+            <button id="btnHudPause" class="px-2 py-1 rounded bg-neutral-900/70 border border-neutral-700 hover:border-cyan-400 text-xs text-neutral-300 cursor-pointer">
+              ⏸️
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Banner de Escudo / Powerup Activo -->
+      <div id="hudPowerupBar" class="mx-auto hidden px-3 py-0.5 rounded-full bg-cyan-950/80 border border-cyan-400 text-cyan-300 text-[10px] font-cyber tracking-widest uppercase">
+        ESCUDO EMP ACTIVO (<span id="hudPowerupSeconds">5</span>s)
+      </div>
+    </div>
+
+    <!-- Fin de misión y paso al siguiente nivel -->
+    <div id="missionModal" class="absolute inset-0 z-40 hidden flex items-center justify-center p-4 bg-neutral-950/85 backdrop-blur-md">
+      <div class="w-full max-w-md p-6 rounded-2xl bg-neutral-900 border border-emerald-400/60 text-center shadow-2xl">
+        <p id="missionModalKicker" class="text-xs font-cyber tracking-widest text-emerald-300">MISIÓN COMPLETADA</p>
+        <h2 id="missionModalTitle" class="text-2xl font-cyber font-black text-white mt-2">INTRODUCCIÓN SUPERADA</h2>
+        <p id="missionModalDescription" class="text-sm text-neutral-300 font-mono mt-3 mb-5"></p>
+        <button id="btnNextMission" class="w-full py-3 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-neutral-950 font-cyber font-black text-sm cursor-pointer">CONTINUAR</button>
+        <button id="btnMissionMenu" class="w-full py-2 mt-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-cyber text-xs cursor-pointer">VOLVER AL MENÚ</button>
+      </div>
+    </div>
+
+    <!-- CONTROLES TÁCTILES EN PANTALLA (TOUCH CONTROLS) -->
+    <div id="touchControls" class="absolute bottom-4 left-0 right-0 z-20 px-4 flex justify-between items-end pointer-events-none select-none sm:hidden">
+      <!-- D-Pad Izquierda / Derecha -->
+      <div class="flex gap-2 pointer-events-auto">
+        <button id="btnTouchLeft" class="w-14 h-14 rounded-2xl bg-neutral-900/80 border-2 border-cyan-500/40 active:bg-cyan-500 active:text-black text-cyan-300 font-cyber font-black text-2xl flex items-center justify-center backdrop-blur-md shadow-lg">
+          ◀
+        </button>
+        <button id="btnTouchRight" class="w-14 h-14 rounded-2xl bg-neutral-900/80 border-2 border-cyan-500/40 active:bg-cyan-500 active:text-black text-cyan-300 font-cyber font-black text-2xl flex items-center justify-center backdrop-blur-md shadow-lg">
+          ▶
+        </button>
+      </div>
+
+      <!-- Acciones Salto / Deslizar -->
+      <div class="flex gap-2 pointer-events-auto">
+        <button id="btnTouchSlide" class="w-14 h-14 rounded-2xl bg-neutral-900/80 border-2 border-amber-500/40 active:bg-amber-500 active:text-black text-amber-300 font-cyber font-bold text-xs flex flex-col items-center justify-center backdrop-blur-md shadow-lg">
+          <span>▼</span>
+          <span class="text-[9px]">SLIDE</span>
+        </button>
+        <button id="btnTouchJump" class="w-14 h-14 rounded-2xl bg-neutral-900/80 border-2 border-emerald-500/40 active:bg-emerald-500 active:text-black text-emerald-300 font-cyber font-bold text-xs flex flex-col items-center justify-center backdrop-blur-md shadow-lg">
+          <span>▲</span>
+          <span class="text-[9px]">SALTO</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- MODAL DE RESURRECCIÓN E INFLACIÓN / GAME OVER -->
+    <div id="gameOverModal" class="absolute inset-0 z-40 flex items-center justify-center p-4 bg-neutral-950/85 backdrop-blur-md hidden">
+      <div class="w-full max-w-md p-6 rounded-2xl bg-neutral-900/95 border border-rose-500/50 shadow-2xl flex flex-col items-center text-center">
+        
+        <div class="px-3 py-1 rounded-full bg-rose-950 border border-rose-500 text-rose-300 text-xs font-cyber tracking-widest uppercase mb-2">
+          ¡SISTEMA INTERCEPTADO!
+        </div>
+
+        <h2 class="text-3xl font-cyber font-black text-rose-500 neon-text-magenta mb-1">
+          CAPTURADO EN BOGOTÁ
+        </h2>
+        
+        <p id="gameOverCause" class="text-xs text-neutral-300 font-mono mb-4">
+          Colisión detectada por el escuadrón de TransMilenio
+        </p>
+
+        <!-- SISTEMA DE RESURRECCIÓN CON INFLACIÓN (TOQUE SECRETO) -->
+        <div id="resurrectSection" class="w-full p-4 rounded-xl bg-neutral-950/80 border border-cyan-500/40 mb-4 flex flex-col items-center">
+          <div class="flex items-center justify-between w-full mb-1">
+            <span class="text-xs font-cyber text-cyan-300">PROTOCOLO DE RESURRECCIÓN</span>
+            <span id="resurrectTimer" class="font-mono text-xs text-rose-400 font-bold">5.0s</span>
+          </div>
+
+          <!-- Barra de tiempo límite para revivir -->
+          <div class="w-full h-1.5 bg-neutral-800 rounded-full overflow-hidden mb-3">
+            <div id="resurrectTimerBar" class="h-full bg-gradient-to-r from-rose-500 to-cyan-400 transition-all duration-100" style="width: 100%;"></div>
+          </div>
+
+          <div class="flex items-center justify-between w-full text-xs font-mono mb-3 bg-neutral-900 p-2 rounded-lg">
+            <span class="text-neutral-400">COSTO INFLACIÓN HACK:</span>
+            <div class="flex items-center gap-1">
+              <span id="resurrectKeyCost" class="text-amber-400 font-bold font-cyber text-sm">1</span>
+              <span class="text-cyan-300">🔑 LLAVES</span>
+            </div>
+          </div>
+
+          <button id="btnResurrect" class="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-teal-500 hover:from-cyan-400 hover:to-teal-400 text-neutral-950 font-cyber font-black text-sm tracking-wider shadow-lg shadow-cyan-500/30 transition-transform active:scale-95 cursor-pointer">
+            REVIVIR (<span id="btnResurrectKeys">1</span> LLAVE)
+          </button>
+          
+          <span id="resurrectFormulaNote" class="text-[9px] text-neutral-500 font-mono mt-1.5">
+            Fórmula: Costo = 2^(resurrecciones) + ⌊distancia / 1500m⌋
+          </span>
+        </div>
+
+        <!-- Estadísticas de la Carrera -->
+        <div class="w-full grid grid-cols-2 gap-2 text-xs font-tech mb-4">
+          <div class="p-2.5 rounded-lg bg-neutral-950 border border-neutral-800 flex flex-col items-center">
+            <span class="text-neutral-400 text-[10px]">DISTANCIA ALCANZADA</span>
+            <span id="goDistance" class="font-cyber text-base text-cyan-300 font-bold">0 m</span>
+          </div>
+          <div class="p-2.5 rounded-lg bg-neutral-950 border border-neutral-800 flex flex-col items-center">
+            <span class="text-neutral-400 text-[10px]">CRIPTO-PESOS OBTENIDOS</span>
+            <span id="goCoins" class="font-cyber text-base text-amber-400 font-bold">0 ₧</span>
+          </div>
+          <div class="p-2.5 rounded-lg bg-neutral-950 border border-neutral-800 flex flex-col items-center">
+            <span class="text-neutral-400 text-[10px]">RÉCORD HISTÓRICO</span>
+            <span id="goHighScore" class="font-cyber text-base text-emerald-400 font-bold">0 m</span>
+          </div>
+          <div class="p-2.5 rounded-lg bg-neutral-950 border border-neutral-800 flex flex-col items-center">
+            <span class="text-neutral-400 text-[10px]">LLAVES EN BILLETERA</span>
+            <span id="goTotalKeys" class="font-cyber text-base text-cyan-400 font-bold">0</span>
+          </div>
+        </div>
+
+        <!-- Botones Finales -->
+        <div class="w-full flex flex-col gap-2">
+          <button id="btnRestartGame" class="w-full py-3 px-4 rounded-xl bg-neutral-100 hover:bg-white text-neutral-950 font-cyber font-black text-sm tracking-wider transition-colors cursor-pointer">
+            🔄 REINTENTAR ESCAPE
+          </button>
+          <div class="grid grid-cols-2 gap-2">
+            <button id="btnGoToShop" class="py-2.5 px-3 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-neutral-200 text-xs font-cyber cursor-pointer">
+              🛒 TIENDA HACK
+            </button>
+            <button id="btnGoToFicha" class="py-2.5 px-3 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-neutral-200 text-xs font-cyber cursor-pointer">
+              📄 FICHA TÉCNICA
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- MODAL DE LA TIENDA DEL MERCADO NEGRO (SHOP) -->
+    <div id="shopModal" class="absolute inset-0 z-50 flex items-center justify-center p-4 bg-neutral-950/85 backdrop-blur-md hidden">
+      <div class="w-full max-w-md p-6 rounded-2xl bg-neutral-900/95 border border-amber-500/50 shadow-2xl flex flex-col items-center text-left max-h-[90vh] overflow-hidden">
+        
+        <div class="w-full flex items-center justify-between pb-3 border-b border-neutral-800 mb-4">
+          <div>
+            <h3 class="text-lg font-cyber font-bold text-amber-400">MERCADO NEGRO BOGOTÁ</h3>
+            <p class="text-[11px] text-neutral-400 font-mono">Contrabando de Llaves de Hackeo y Ciber-Mejoras</p>
+          </div>
+          <button id="btnCloseShop" class="text-neutral-400 hover:text-white font-cyber text-lg cursor-pointer p-1">
+            ✕
+          </button>
+        </div>
+
+        <!-- Billetera del Usuario -->
+        <div class="w-full flex items-center justify-between p-3 rounded-xl bg-neutral-950 border border-neutral-800 mb-4">
+          <div class="flex items-center gap-2">
+            <span class="text-amber-400 font-bold font-cyber text-lg">₧</span>
+            <div>
+              <span class="text-[10px] text-neutral-400 block font-mono">TUS CRIPTO-PESOS</span>
+              <span id="shopWalletCoins" class="font-cyber font-bold text-amber-300 text-base">0</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-cyan-400 text-lg">🔑</span>
+            <div>
+              <span class="text-[10px] text-neutral-400 block font-mono">TUS LLAVES HACK</span>
+              <span id="shopWalletKeys" class="font-cyber font-bold text-cyan-300 text-base">0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Artículos Disponibles -->
+        <div class="w-full flex flex-col gap-3 overflow-y-auto custom-scrollbar pr-1 flex-1 mb-4">
+          
+          <!-- Paquete 1 Llave -->
+          <div class="p-3 rounded-xl bg-neutral-950/80 border border-neutral-800 hover:border-cyan-500/40 flex items-center justify-between">
+            <div>
+              <span class="font-cyber text-xs font-bold text-cyan-300 block">1x Llave de Hackeo</span>
+              <span class="text-[10px] text-neutral-400 font-mono">Bypassa el bloqueo del Dron</span>
+            </div>
+            <button id="btnBuyKey1" class="py-1.5 px-3 rounded-lg bg-cyan-950 hover:bg-cyan-900 border border-cyan-500/50 text-cyan-300 font-cyber text-xs font-bold cursor-pointer">
+              50 ₧
+            </button>
+          </div>
+
+          <!-- Paquete 3 Llaves -->
+          <div class="p-3 rounded-xl bg-neutral-950/80 border border-neutral-800 hover:border-cyan-500/40 flex items-center justify-between">
+            <div>
+              <span class="font-cyber text-xs font-bold text-cyan-300 block">3x Llaves de Hackeo</span>
+              <span class="text-[10px] text-neutral-400 font-mono">Ahorro del 15% en lote</span>
+            </div>
+            <button id="btnBuyKey3" class="py-1.5 px-3 rounded-lg bg-cyan-950 hover:bg-cyan-900 border border-cyan-500/50 text-cyan-300 font-cyber text-xs font-bold cursor-pointer">
+              125 ₧
+            </button>
+          </div>
+
+          <!-- Escudo Magnético Inicial -->
+          <div class="p-3 rounded-xl bg-neutral-950/80 border border-neutral-800 hover:border-emerald-500/40 flex items-center justify-between">
+            <div>
+              <span class="font-cyber text-xs font-bold text-emerald-300 block">Escudo EMP de Salida</span>
+              <span class="text-[10px] text-neutral-400 font-mono">Inicia cada carrera con escudo 5s</span>
+            </div>
+            <button id="btnBuyShield" class="py-1.5 px-3 rounded-lg bg-emerald-950 hover:bg-emerald-900 border border-emerald-500/50 text-emerald-300 font-cyber text-xs font-bold cursor-pointer">
+              80 ₧
+            </button>
+          </div>
+
+        </div>
+
+        <button id="btnCloseShopFooter" class="w-full py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-cyber text-xs font-bold cursor-pointer">
+          VOLVER AL JUEGO
+        </button>
+      </div>
+    </div>
+
+    <!-- RANKING DEL COLEGIO / FIRESTORE -->
+    <div id="rankingModal" class="absolute inset-0 z-50 flex items-center justify-center p-4 bg-neutral-950/85 backdrop-blur-md hidden">
+      <div class="w-full max-w-md p-6 rounded-2xl bg-neutral-900/95 border border-amber-500/50 shadow-2xl flex flex-col text-left max-h-[85vh]">
+        <div class="w-full flex items-start justify-between gap-3 pb-3 border-b border-neutral-800 mb-3">
+          <div>
+            <h3 class="text-lg font-cyber font-bold text-amber-400">RANKING DEL COLEGIO</h3>
+            <p class="text-[10px] text-neutral-400 font-mono">Top 10 sincronizado en tiempo real</p>
+          </div>
+          <button id="btnCloseRanking" class="text-neutral-400 hover:text-white font-cyber text-lg cursor-pointer p-1" aria-label="Cerrar ranking">✕</button>
+        </div>
+        <p id="rankingStatus" class="min-h-5 text-[10px] font-mono text-neutral-500 mb-2">Conecta tu perfil para consultar el ranking.</p>
+        <ol id="rankingList" class="space-y-2 overflow-y-auto custom-scrollbar pr-1"></ol>
+        <button id="btnCloseRankingFooter" class="mt-4 w-full py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-cyber text-xs font-bold cursor-pointer">
+          VOLVER AL MENÚ
+        </button>
+      </div>
+    </div>
+
+    <!-- MODAL DE LA FICHA TÉCNICA -->
+    <div id="fichaModal" class="absolute inset-0 z-50 flex items-center justify-center p-4 bg-neutral-950/90 backdrop-blur-md hidden">
+      <div class="w-full max-w-2xl p-6 rounded-2xl bg-neutral-900/95 border border-indigo-500/50 shadow-2xl flex flex-col text-left max-h-[85vh] overflow-hidden">
+        
+        <div class="w-full flex items-center justify-between pb-3 border-b border-neutral-800 mb-4">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 font-cyber text-[10px] border border-indigo-700">DOCUMENTO OFICIAL</span>
+              <h3 class="text-lg font-cyber font-bold text-white">FICHA TÉCNICA</h3>
+            </div>
+            <p class="text-xs text-indigo-300 font-mono">CyberRun: Escape de Bogotá 2080 — Carrera pseudo-3D por misiones</p>
+          </div>
+          <button id="btnCloseFicha" class="text-neutral-400 hover:text-white font-cyber text-lg cursor-pointer p-1">
+            ✕
+          </button>
+        </div>
+
+        <div class="overflow-y-auto custom-scrollbar pr-2 flex-1 space-y-4 text-xs font-tech text-neutral-300 leading-relaxed">
+          
+          <div class="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800">
+            <h4 class="font-cyber font-bold text-cyan-400 text-sm mb-1">1. IDENTIDAD Y NARRATIVA</h4>
+            <p><strong>Título:</strong> CyberRun: Escape de Bogotá 2080.</p>
+            <p><strong>Ambientación:</strong> Bogotá cyberpunk distópica. Autopistas aéreas magnéticas que serpentean entre los rascacielos de la Calle 26 y la Carrera 7ma, con los cerros orientales de Monserrate dotados de una colosal torre de transmisión láser y la Torre Colpatria con pantallas holográficas verticales.</p>
+          </div>
+
+          <div class="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800">
+            <h4 class="font-cyber font-bold text-rose-400 text-sm mb-1">2. EL TOQUE SECRETO DEL DISEÑO</h4>
+            <ul class="list-disc list-inside space-y-1 mt-1 text-neutral-300">
+              <li><strong class="text-rose-300">Dron Policial de Persecución (POL-METRO 2080):</strong> El jugador no corre en el vacío; un dron de asalto policial lo vigila con una mira láser roja apuntada a su espalda. Cualquier tropiezo o baja de velocidad reduce la distancia de seguridad con el dron, activando la sirena de emergencia hasta su captura si no reacciona a tiempo.</li>
+              <li><strong class="text-amber-300">Sistema de Resurrección con Inflación Hacker:</strong> Revivir cuesta Llaves de Hackeo cuyo valor se dispara tras cada uso según la fórmula matemática:
+                <code class="block mt-1 p-2 bg-neutral-900 text-amber-300 font-mono rounded">Costo = 2^(resurrecciones) + ⌊distancia / 1500⌋</code>
+              </li>
+            </ul>
+          </div>
+
+          <div class="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800">
+            <h4 class="font-cyber font-bold text-emerald-400 text-sm mb-1">3. ARQUITECTURA TÉCNICA (60 FPS PARA COLEGIOS)</h4>
+            <p><strong>Motor de Render:</strong> Desarrollado en <strong>HTML5 Canvas 2D nativo</strong> mediante proyección matemática cónica pseudo-3D ($k = \text{fov} / (\text{fov} + z)$). Esto evita el sobrecalentamiento y la sobrecarga gráfica de motores 3D complejos en portátiles escolares, Chromebooks y dispositivos móviles modestos, garantizando 60 FPS estables.</p>
+            <p class="mt-1"><strong>Audio:</strong> Web Audio API con síntesis FM y ondas osciladoras en tiempo real. 0 KB de descarga de librerías externas de audio.</p>
+          </div>
+
+          <div class="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800">
+            <h4 class="font-cyber font-bold text-indigo-400 text-sm mb-1">4. OBSTÁCULOS Y ENTIDADES LOCALES</h4>
+            <ul class="list-disc list-inside space-y-1 mt-1 text-neutral-300">
+              <li><strong class="text-rose-400">TransMilenio Volador Bi-articulado:</strong> Vagón doble rojo de levitación magnética con rutas auténticas (B75 Portal Norte, K10 El Dorado, H74 Usme).</li>
+              <li><strong class="text-amber-400">Taxi Flotante Cuántico:</strong> El clásico taxi amarillo con franjas de ajedrez negro y propulsores de plasma.</li>
+              <li><strong class="text-cyan-400">Barreras Policiales de Neón:</strong> Barreras bajas (requieren salto) y barreras altas con rayo escáner (requieren deslizarse en cuclillas).</li>
+            </ul>
+          </div>
+
+          <div class="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800">
+            <h4 class="font-cyber font-bold text-neutral-200 text-sm mb-1">5. MAPA DE RECURSOS (assets/)</h4>
+            <p class="text-neutral-400">Los obstáculos y monedas usan los sprites disponibles en <code class="text-cyan-300 font-mono">assets/</code>. Los elementos sin imagen mantienen dibujo procedural:</p>
+            <div class="grid grid-cols-2 gap-2 mt-2 font-mono text-[10px] text-neutral-400 break-all">
+              <div>• assets/images/runner1.png</div>
+              <div>• assets/images/runner2.png</div>
+              <div>• assets/images/bus.png</div>
+              <div>• assets/images/drone.png</div>
+              <div>• assets/images/moneda.png</div>
+              <div>• assets/images/obstaculo-bajo.png</div>
+              <div>• assets/images/obstaculo alto.png</div>
+              <div>• assets/Bogota_controled_AI.jpeg</div>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="mt-4 pt-3 border-t border-neutral-800 flex justify-end">
+          <button id="btnCloseFichaFooter" class="py-2 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-cyber text-xs font-bold cursor-pointer">
+            ENTENDIDO
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- MODAL DE PAUSA -->
+    <div id="pauseModal" class="absolute inset-0 z-40 flex items-center justify-center p-4 bg-neutral-950/80 backdrop-blur-sm hidden">
+      <div class="w-full max-w-xs p-6 rounded-2xl bg-neutral-900 border border-cyan-500/50 shadow-2xl flex flex-col items-center text-center">
+        <h3 class="font-cyber font-black text-2xl text-cyan-400 mb-2">PAUSA</h3>
+        <p class="text-xs text-neutral-400 font-mono mb-4">Escape congelado temporalmente</p>
+        <button id="btnResumeGame" class="w-full py-2.5 px-4 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-neutral-950 font-cyber font-bold text-sm cursor-pointer mb-2">
+          CONTINUAR
+        </button>
+        <button id="btnQuitToStart" class="w-full py-2 px-4 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-cyber text-xs cursor-pointer">
+          SALIR AL MENÚ
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- SCRIPT COMPLETO CON EL MOTOR DEL JUEGO (JAVASCRIPT PURO) -->
+  <script>
+    /* ==========================================================================
+       CYBERRUN: ESCAPE DE BOGOTÁ 2080
+       Motor de Juego Completo en JavaScript Puro (Vanilla JS + HTML5 Canvas 2D)
+       ========================================================================== */
+
+    // 1. RUTAS DE ASSETS CON FALLBACK PROCEDURAL AUTOMÁTICO
+    const ASSETS = {
+      images: {
+        runner1: 'assets/images/runner1.png',
+        runner2: 'assets/images/runner2.png',
+        slide: 'assets/images/slide.png',
+        transmilenio: 'assets/images/bus.png',
+        drone: 'assets/images/drone.png',
+        barrierLow: 'assets/images/obstaculo-bajo.png',
+        barrierHigh: 'assets/images/obstaculo%20alto.png',
+        coin: 'assets/images/moneda.png',
+        intro: 'assets/Bogota_controled_AI.jpeg'
+      },
+      videos: {
+        intro: 'assets/intro.mp4',
+        escape: 'assets/hacker_scaping.mp4',
+        gameOver: 'assets/game_over.mp4'
+      }
+    };
+
+    const mediaOverlay = {
+      root: document.getElementById('mediaOverlay'),
+      image: document.getElementById('storyImage'),
+      video: document.getElementById('storyVideo'),
+      caption: document.getElementById('mediaCaption'),
+      timer: null,
+      active: false,
+      onComplete: null
+    };
+
+    function hideAllGameMenus() {
+      document.getElementById('startScreen').classList.add('hidden');
+      document.getElementById('gameHUD').classList.add('hidden');
+      document.getElementById('gameOverModal').classList.add('hidden');
+      document.getElementById('pauseModal').classList.add('hidden');
+      document.getElementById('shopModal').classList.add('hidden');
+      document.getElementById('rankingModal').classList.add('hidden');
+      document.getElementById('fichaModal').classList.add('hidden');
+      document.getElementById('missionModal').classList.add('hidden');
+    }
+
+    function hideMediaScene() {
+      if (!mediaOverlay.active && mediaOverlay.root.classList.contains('hidden')) {
+        return;
+      }
+
+      const nextAction = mediaOverlay.onComplete;
+      mediaOverlay.onComplete = null;
+
+      if (mediaOverlay.timer) {
+        clearTimeout(mediaOverlay.timer);
+        mediaOverlay.timer = null;
+      }
+      if (!mediaOverlay.video.paused) {
+        mediaOverlay.video.pause();
+      }
+
+      mediaOverlay.root.classList.add('hidden');
+      mediaOverlay.root.style.opacity = '0';
+      mediaOverlay.root.style.visibility = 'hidden';
+
+      setTimeout(() => {
+        mediaOverlay.video.currentTime = 0;
+        mediaOverlay.video.removeAttribute('src');
+        mediaOverlay.video.load();
+        mediaOverlay.image.removeAttribute('src');
+        mediaOverlay.image.classList.add('hidden');
+        mediaOverlay.video.classList.add('hidden');
+        mediaOverlay.caption.classList.add('hidden');
+        mediaOverlay.caption.innerText = '';
+        mediaOverlay.root.classList.add('hidden');
+        mediaOverlay.active = false;
+
+        if (nextAction) {
+          nextAction();
+        }
+      }, 220);
+    }
+
+    function goToStartMenuFromGameOver() {
+      if (!gameOverSequenceActive) return;
+      gameOverSequenceActive = false;
+      lastIntroScenePlayed = false;
+      mediaOverlay.active = false;
+      gameState.status = 'idle';
+      if (!mediaOverlay.video.paused) {
+        mediaOverlay.video.pause();
+      }
+      mediaOverlay.video.currentTime = 0;
+      mediaOverlay.video.onended = null;
+      mediaOverlay.video.onerror = null;
+      mediaOverlay.video.removeAttribute('src');
+      mediaOverlay.video.load();
+      document.getElementById('gameOverModal').classList.add('hidden');
+      document.getElementById('gameHUD').classList.add('hidden');
+      document.getElementById('startScreen').classList.remove('hidden');
+      document.getElementById('pauseModal').classList.add('hidden');
+      document.getElementById('shopModal').classList.add('hidden');
+      document.getElementById('rankingModal').classList.add('hidden');
+      document.getElementById('fichaModal').classList.add('hidden');
+    }
+
+    function finishGameOverSequence() {
+      if (!gameOverSequenceActive) return;
+      gameOverSequenceActive = false;
+      mediaOverlay.onComplete = () => {
+        openGameOverModal();
+      };
+      hideMediaScene();
+    }
+
+    function showMediaScene(type, { src, caption = '', duration = 0, onComplete = null } = {}) {
+      if (!src) return;
+      hideAllGameMenus();
+      mediaOverlay.onComplete = onComplete;
+      mediaOverlay.root.classList.remove('hidden');
+      mediaOverlay.root.style.opacity = '1';
+      mediaOverlay.root.style.visibility = 'visible';
+      mediaOverlay.active = true;
+
+      if (type === 'image') {
+        mediaOverlay.image.src = src;
+        mediaOverlay.image.classList.remove('hidden');
+        mediaOverlay.video.classList.add('hidden');
+        mediaOverlay.video.onended = null;
+      } else {
+        mediaOverlay.video.src = src;
+        mediaOverlay.video.classList.remove('hidden');
+        mediaOverlay.image.classList.add('hidden');
+        // Los MP4 incluyen pista AAC. Solo se silencian si el jugador activó
+        // expresamente el control general de sonido.
+        mediaOverlay.video.muted = audio.isMuted;
+        mediaOverlay.video.volume = audio.isMuted ? 0 : 1;
+        mediaOverlay.video.onended = () => {
+          if (gameOverSequenceActive) {
+            finishGameOverSequence();
+            return;
+          }
+          hideMediaScene();
+        };
+        mediaOverlay.video.onerror = () => {
+          setTimeout(() => {
+            if (mediaOverlay.active) {
+              if (gameOverSequenceActive) {
+                finishGameOverSequence();
+              } else {
+                hideMediaScene();
+              }
+            }
+          }, 200);
+        };
+        mediaOverlay.video.play().catch(() => {
+          setTimeout(() => {
+            if (mediaOverlay.active) {
+              if (gameOverSequenceActive) {
+                finishGameOverSequence();
+              } else {
+                hideMediaScene();
+              }
+            }
+          }, 250);
+        });
+      }
+
+      if (caption) {
+        mediaOverlay.caption.innerText = caption;
+        mediaOverlay.caption.classList.remove('hidden');
+      } else {
+        mediaOverlay.caption.classList.add('hidden');
+      }
+
+      // Las imágenes pueden tener una duración fija; los vídeos se cierran al
+      // terminar su archivo para que nunca queden recortados a mitad de escena.
+      if (duration > 0 && type !== 'video') {
+        mediaOverlay.timer = setTimeout(() => {
+          if (gameOverSequenceActive) {
+            finishGameOverSequence();
+          } else {
+            hideMediaScene();
+          }
+        }, duration);
+      }
+    }
+
+    // Cache de imágenes cargadas
+    const loadedImages = {};
+    for (const [key, path] of Object.entries(ASSETS.images)) {
+      const img = new Image();
+      img.src = path;
+      img.onload = () => { loadedImages[key] = img; };
+      img.onerror = () => { loadedImages[key] = null; }; // Fallback procedural suave si no existe el archivo aún
+    }
+
+    // Los PNG nuevos tienen márgenes transparentes; dibujar solo su contenido
+    // evita que el obstáculo parezca mucho menor que su caja de colisión.
+    const SPRITE_CROPS = {
+      transmilenio: [0.226, 0.059, 0.571, 0.905],
+      barrierLow: [0.075, 0.298, 0.847, 0.451],
+      barrierHigh: [0.154, 0.109, 0.695, 0.803],
+      coin: [0.259, 0.066, 0.463, 0.867]
+    };
+
+    function drawTrimmedSprite(key, x, y, width, height) {
+      const img = loadedImages[key];
+      if (!img) return false;
+      const [left, top, cropWidth, cropHeight] = SPRITE_CROPS[key];
+      ctx.drawImage(img, left * img.naturalWidth, top * img.naturalHeight,
+        cropWidth * img.naturalWidth, cropHeight * img.naturalHeight,
+        x, y, width, height);
+      return true;
+    }
+
+    // Animación del corredor por frames (runner1.png / runner2.png)
+    const RUNNER_ANIM = {
+      frameDuration: 0.11,   // segundos que dura cada frame del ciclo de carrera
+      airFrame: 0            // frame fijo que se usa en salto / deslizamiento
+    };
+
+    // Escala visual independiente de la física. El corredor gana presencia sin
+    // convertir sus píxeles transparentes en una zona de impacto más grande.
+    const RUNNER_SPRITE_SCALE = 1.28;
+
+    // El sprite del dron se dibuja alargado respetando las dimensiones reales del PNG
+    const DRONE_SPRITE_STRETCH = 1.6; // factor de alargue sobre el ancho base del dron
+    const DRONE_SPRITE_SCALE = 0.72;
+
+    // Devuelve los frames del corredor ya cargados, en orden
+    function getRunnerFrames() {
+      return [loadedImages.runner1, loadedImages.runner2].filter(Boolean);
+    }
+
+    // 2. SISTEMA DE AUDIO SINTETIZADO (WEB AUDIO API)
+    class CyberAudio {
+      constructor() {
+        this.ctx = null;
+        this.isMuted = false;
+        this.musicInterval = null;
+        this.step = 0;
+      }
+
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (AudioContext) {
+            this.ctx = new AudioContext();
+          }
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+
+      playJump() {
+        if (this.isMuted) return;
+        this.init();
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(260, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(750, this.ctx.currentTime + 0.18);
+        gain.gain.setValueAtTime(0.25, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.18);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.18);
+      }
+
+      playSlide() {
+        if (this.isMuted) return;
+        this.init();
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(320, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(110, this.ctx.currentTime + 0.22);
+        gain.gain.setValueAtTime(0.18, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.22);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.22);
+      }
+
+      playCoin() {
+        if (this.isMuted) return;
+        this.init();
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(880, this.ctx.currentTime);
+        osc.frequency.setValueAtTime(1320, this.ctx.currentTime + 0.06);
+        gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.18);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.18);
+      }
+
+      playKey() {
+        if (this.isMuted) return;
+        this.init();
+        if (!this.ctx) return;
+        const notes = [587.33, 880, 1174.66];
+        notes.forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, this.ctx.currentTime + idx * 0.07);
+          gain.gain.setValueAtTime(0.2, this.ctx.currentTime + idx * 0.07);
+          gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + idx * 0.07 + 0.2);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(this.ctx.currentTime + idx * 0.07);
+          osc.stop(this.ctx.currentTime + idx * 0.07 + 0.2);
+        });
+      }
+
+      playCrash() {
+        if (this.isMuted) return;
+        this.init();
+        if (!this.ctx) return;
+        const bufferSize = this.ctx.sampleRate * 0.35;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = Math.random() * 2 - 1;
+        }
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(600, this.ctx.currentTime);
+        filter.frequency.exponentialRampToValueAtTime(80, this.ctx.currentTime + 0.35);
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.35);
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.ctx.destination);
+        noise.start();
+        noise.stop(this.ctx.currentTime + 0.35);
+      }
+
+      playSiren() {
+        if (this.isMuted) return;
+        this.init();
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(500, this.ctx.currentTime);
+        osc.frequency.linearRampToValueAtTime(900, this.ctx.currentTime + 0.15);
+        osc.frequency.linearRampToValueAtTime(500, this.ctx.currentTime + 0.3);
+        gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.3);
+      }
+
+      startSynthwaveMusic() {
+        if (this.musicInterval) return;
+        const bassline = [110, 110, 130.81, 146.83, 110, 98, 110, 164.81];
+        this.musicInterval = setInterval(() => {
+          if (this.isMuted || !this.ctx) return;
+          const freq = bassline[this.step % bassline.length];
+          this.step++;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+          gain.gain.setValueAtTime(0.04, this.ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.15);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(this.ctx.currentTime + 0.16);
+        }, 220);
+      }
+
+      stopSynthwaveMusic() {
+        if (this.musicInterval) {
+          clearInterval(this.musicInterval);
+          this.musicInterval = null;
+        }
+      }
+
+      toggleMute() {
+        this.isMuted = !this.isMuted;
+        if (!this.isMuted) {
+          this.init();
+        }
+        return this.isMuted;
+      }
+    }
+
+    const audio = new CyberAudio();
+
+    // 3. CONSTANTES Y CONFIGURACIÓN DEL JUEGO
+    const LANES = [-1, 0, 1]; // Izquierda, Centro, Derecha
+    const LANE_WIDTH_3D = 3.6;
+    const ROAD_WIDTH_3D = 13.0;
+    const HORIZON_RATIO = 0.44; // Altura del horizonte
+    const FOV = 450;
+    const CAMERA_HEIGHT = 2.7;
+    const GRAVITY = 32;
+    const JUMP_VELOCITY = 10.5;
+    const SLIDE_DURATION = 1.0;
+
+    // Cajas de impacto en unidades del mundo. Son deliberadamente un poco más
+    // pequeñas que el dibujo: los bordes transparentes de los PNG no golpean.
+    const PLAYER_HITBOX = {
+      halfWidth: 0.38,
+      halfDepth: 0.24,
+      standingHeight: 1.42,
+      slidingHeight: 0.60,
+      footInset: 0.05
+    };
+
+    // Las tres misiones tienen metas y ritmos propios. La distancia de perfil
+    // sigue siendo acumulada para conservar el ranking existente.
+    const MISSIONS = [
+      { number: 1, title: 'Introducción / Tutorial', shortTitle: 'INTRODUCCIÓN', startDistance: 0,
+        distanceGoal: 500, baseSpeed: 16, maxSpeed: 21, acceleration: 130,
+        spawnInterval: 2.0, obstacleChance: 0.42, description: '500 m y practica carril, salto y deslizamiento.' },
+      { number: 2, title: 'El Nudo / Desafío Medio', shortTitle: 'EL NUDO', startDistance: 500,
+        distanceGoal: 800, baseSpeed: 22, maxSpeed: 32, acceleration: 95,
+        spawnInterval: 1.3, obstacleChance: 0.70, description: 'Recorre 800 m entre más tráfico y barreras.' },
+      { number: 3, title: 'Batalla Final / Sobrevivencia', shortTitle: 'BATALLA FINAL', startDistance: 1300,
+        duration: 45, baseSpeed: 29, maxSpeed: 40, acceleration: 75,
+        spawnInterval: 0.85, obstacleChance: 0.82, description: 'Sobrevive 45 s a la persecución final.' }
+    ];
+
+    const SCENE_THEMES = [
+      { name: 'CORREDOR DE BOGOTÁ', abyssTop: '#111329', abyssBottom: '#030611',
+        roadA: '#162238', roadB: '#0c1425', edgeLeft: '#38e7ff', edgeRight: '#f55ac9', lane: 'rgba(255, 211, 112, 0.56)' },
+      { name: 'NODO CENTRAL', abyssTop: '#27101f', abyssBottom: '#090710',
+        roadA: '#302035', roadB: '#211629', edgeLeft: '#ffba59', edgeRight: '#c47aff', lane: 'rgba(255, 176, 99, 0.7)' },
+      { name: 'ZONA DE SITIO', abyssTop: '#330a17', abyssBottom: '#0d030b',
+        roadA: '#381521', roadB: '#260d19', edgeLeft: '#ff506e', edgeRight: '#ffb648', lane: 'rgba(255, 102, 116, 0.72)' }
+    ];
+
+    // 4. ESTADO GLOBAL DEL JUEGO Y PERSISTENCIA
+    const gameState = {
+      status: 'idle', // 'idle' | 'playing' | 'paused' | 'gameover' | 'transition' | 'victory'
+      currentMission: 1,
+      missionDistance: 0,
+      missionTime: 0,
+      sceneReveal: 0,
+      tutorialActions: { lane: false, jump: false, slide: false },
+      unlockedMission: Math.min(3, Math.max(1, parseInt(localStorage.getItem('cyberrun_unlocked_mission') || '1', 10) || 1)),
+      distance: 0,
+      speed: 18, // Metros por segundo en 3D
+      baseSpeed: 18,
+      maxSpeed: 45,
+      coins: 0,
+      totalCoins: parseInt(localStorage.getItem('cyberrun_coins') || '0', 10),
+      hackKeys: parseInt(localStorage.getItem('cyberrun_keys') || '2', 10),
+      highScore: parseInt(localStorage.getItem('cyberrun_highscore') || '0', 10),
+      level: parseInt(localStorage.getItem('cyberrun_level') || '1', 10),
+      rank: localStorage.getItem('cyberrun_rank') || 'Aprendiz',
+      missionsCompleted: parseInt(localStorage.getItem('cyberrun_missions') || '0', 10),
+      deaths: parseInt(localStorage.getItem('cyberrun_deaths') || '0', 10),
+      hasShield: false,
+      shieldTime: 0,
+      resurrectionCount: 0,
+      resurrectCost: 1,
+      resurrectTimer: 5.0,
+      resurrectTimerId: null,
+      gameOverCause: '',
+      roadOffsetZ: 0,
+      gameTime: 0
+    };
+    let selectedMission = 1;
+
+    function renderMissionSelector() {
+      const selector = document.getElementById('missionSelector');
+      selector.replaceChildren();
+      MISSIONS.forEach(mission => {
+        const unlocked = mission.number <= gameState.unlockedMission;
+        const selected = mission.number === selectedMission;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.disabled = !unlocked;
+        button.setAttribute('aria-pressed', String(selected));
+        button.className = `p-2.5 rounded-lg border text-left font-cyber transition-colors ${unlocked
+          ? selected ? 'border-cyan-300 bg-cyan-950/80 text-white' : 'border-neutral-700 bg-neutral-950/80 text-neutral-300 hover:border-cyan-500'
+          : 'border-neutral-800 bg-neutral-950/60 text-neutral-600 cursor-not-allowed'}`;
+        const title = document.createElement('span');
+        title.className = 'block text-[10px] font-bold';
+        title.textContent = `${unlocked ? '●' : '🔒'} MISIÓN ${mission.number}`;
+        const description = document.createElement('span');
+        description.className = 'block text-[9px] leading-tight mt-1';
+        description.textContent = mission.title;
+        const objective = document.createElement('span');
+        objective.className = 'block text-[9px] leading-tight mt-1 text-neutral-400';
+        objective.textContent = mission.description;
+        button.append(title, description, objective);
+        if (unlocked) button.addEventListener('click', () => {
+          selectedMission = mission.number;
+          renderMissionSelector();
+        });
+        selector.append(button);
+      });
+      document.getElementById('btnStartGame').textContent = `► INICIAR MISIÓN ${selectedMission}`;
+    }
+
+    // 4.1 PERFIL Y CLASIFICACIÓN EN FIREBASE FIRESTORE
+    const firebaseConfig = {
+      apiKey: "AIzaSyCYQZUK7fyeWIWuUzu9ObNoAFYAIpOROp0",
+      authDomain: "bogotaai.firebaseapp.com",
+      projectId: "bogotaai",
+      storageBucket: "bogotaai.firebasestorage.app",
+      messagingSenderId: "203565237055",
+      appId: "1:203565237055:web:d31bf8066f9525251ac98a"
+    };
+
+    const playerProfile = {
+      db: null,
+      id: null,
+      nickname: '',
+      rankingUnsubscribe: null
+    };
+
+    function safeInt(value, fallback = 0) {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : fallback;
+    }
+
+    function getRankForLevel(level) {
+      if (level >= 10) return 'Leyenda Neon';
+      if (level >= 7) return 'Operador Metro';
+      if (level >= 4) return 'Hacker Urbano';
+      if (level >= 2) return 'Corredor Cívico';
+      return 'Aprendiz';
+    }
+
+    function getLevelFromScore(score) {
+      return Math.max(1, Math.floor(safeInt(score) / 1000) + 1);
+    }
+
+    function setProfileStatus(message, tone = 'text-neutral-500') {
+      const status = document.getElementById('profileStatus');
+      status.textContent = message;
+      status.className = `text-[9px] font-mono ${tone}`;
+    }
+
+    function updateProfileUI() {
+      document.getElementById('profileLevel').textContent = gameState.level;
+      document.getElementById('profileCoins').textContent = gameState.totalCoins;
+      document.getElementById('profileRank').textContent = gameState.rank;
+      document.getElementById('profileHighScore').textContent = gameState.highScore + ' m';
+      renderMissionSelector();
+    }
+
+    function saveWalletLocally() {
+      localStorage.setItem('cyberrun_coins', String(gameState.totalCoins));
+      localStorage.setItem('cyberrun_keys', String(gameState.hackKeys));
+    }
+
+    function saveProfileLocally() {
+      localStorage.setItem('cyberrun_level', String(gameState.level));
+      localStorage.setItem('cyberrun_rank', gameState.rank);
+      localStorage.setItem('cyberrun_missions', String(gameState.missionsCompleted));
+      localStorage.setItem('cyberrun_deaths', String(gameState.deaths));
+      localStorage.setItem('cyberrun_highscore', String(gameState.highScore));
+      saveWalletLocally();
+      localStorage.setItem('cyberrun_unlocked_mission', String(gameState.unlockedMission));
+      if (playerProfile.nickname) localStorage.setItem('cyberrun_nickname', playerProfile.nickname);
+    }
+
+    function resetProfileProgress() {
+      gameState.level = 1;
+      gameState.rank = getRankForLevel(gameState.level);
+      gameState.totalCoins = 0;
+      gameState.highScore = 0;
+      gameState.missionsCompleted = 0;
+      gameState.deaths = 0;
+      gameState.unlockedMission = 1;
+      selectedMission = 1;
+    }
+
+    function applyCloudProfile(data) {
+      gameState.level = Math.max(1, safeInt(data.nivel, 1));
+      gameState.totalCoins = safeInt(data.monedas, 0);
+      gameState.highScore = safeInt(data.mejorPuntaje, 0);
+      gameState.missionsCompleted = safeInt(data.misionesCompletadas, 0);
+      gameState.deaths = safeInt(data.muertes, 0);
+      gameState.unlockedMission = Math.min(3, Math.max(1, safeInt(data.misionDesbloqueada, 1)));
+      selectedMission = Math.min(selectedMission, gameState.unlockedMission);
+      gameState.level = Math.max(gameState.level, getLevelFromScore(gameState.highScore));
+      gameState.rank = typeof data.rango === 'string' && data.rango.trim() ? data.rango : getRankForLevel(gameState.level);
+      saveProfileLocally();
+      updateProfileUI();
+      updateShopUI();
+    }
+
+    function normalizeNickname(value) {
+      return value.normalize('NFKC').trim().replace(/\s+/g, ' ').slice(0, 20);
+    }
+
+    function getPlayerDocumentId(nickname) {
+      return encodeURIComponent(nickname.toLocaleLowerCase('es-CO'));
+    }
+
+    function getFirestoreDb() {
+      if (playerProfile.db) return playerProfile.db;
+      if (typeof firebase === 'undefined') {
+        setProfileStatus('Firebase no está disponible', 'text-rose-400');
+        return null;
+      }
+
+      try {
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        playerProfile.db = firebase.firestore();
+        return playerProfile.db;
+      } catch (error) {
+        console.error('No se pudo iniciar Firebase.', error);
+        setProfileStatus('No se pudo conectar a Firebase', 'text-rose-400');
+        return null;
+      }
+    }
+
+    function getFirestoreStats(eventName) {
+      return {
+        nickname: playerProfile.nickname,
+        nivel: gameState.level,
+        monedas: gameState.totalCoins,
+        mejorPuntaje: gameState.highScore,
+        rango: gameState.rank,
+        misionesCompletadas: gameState.missionsCompleted,
+        misionDesbloqueada: gameState.unlockedMission,
+        muertes: gameState.deaths,
+        ultimoEvento: eventName,
+        actualizadoEn: firebase.firestore.FieldValue.serverTimestamp()
+      };
+    }
+
+    async function loadOrCreatePlayerProfile(forceReload = false) {
+      const nicknameInput = document.getElementById('nicknameInput');
+      const nickname = normalizeNickname(nicknameInput.value);
+      nicknameInput.value = nickname;
+
+      if (nickname.length < 2) {
+        setProfileStatus('Usa un nickname de al menos 2 caracteres', 'text-rose-400');
+        nicknameInput.focus();
+        return false;
+      }
+
+      if (!forceReload && playerProfile.id && playerProfile.nickname === nickname) return true;
+
+      const db = getFirestoreDb();
+      if (!db) {
+        // La conexión remota no puede impedir que la partida se inicie.
+        playerProfile.id = null;
+        playerProfile.nickname = nickname;
+        saveProfileLocally();
+        updateProfileUI();
+        setProfileStatus('Modo local: se sincronizará al reconectar', 'text-amber-300');
+        return true;
+      }
+
+      const profileId = getPlayerDocumentId(nickname);
+      setProfileStatus('Buscando perfil…', 'text-cyan-300');
+
+      try {
+        const playerRef = db.collection('jugadores').doc(profileId);
+        const snapshot = await playerRef.get();
+
+        // Evita aplicar una respuesta antigua si se cambió el nickname durante la consulta.
+        if (normalizeNickname(nicknameInput.value) !== nickname) return false;
+
+        playerProfile.id = profileId;
+        playerProfile.nickname = nickname;
+
+        if (snapshot.exists) {
+          applyCloudProfile(snapshot.data());
+          setProfileStatus('Perfil cargado y sincronizado', 'text-emerald-300');
+        } else {
+          resetProfileProgress();
+          const newProfile = {
+            ...getFirestoreStats('perfil-creado'),
+            creadoEn: firebase.firestore.FieldValue.serverTimestamp()
+          };
+          await playerRef.set(newProfile);
+          saveProfileLocally();
+          updateProfileUI();
+          updateShopUI();
+          setProfileStatus('Nuevo perfil creado', 'text-emerald-300');
+        }
+
+        return true;
+      } catch (error) {
+        console.error('No se pudo cargar el perfil de Firestore.', error);
+        playerProfile.id = null;
+        playerProfile.nickname = nickname;
+        saveProfileLocally();
+        updateProfileUI();
+        setProfileStatus('Modo local: perfil pendiente de sincronizar', 'text-amber-300');
+        return true;
+      }
+    }
+
+    function recordRunProgress() {
+      gameState.highScore = Math.max(gameState.highScore, Math.floor(gameState.distance));
+      gameState.level = Math.max(gameState.level, getLevelFromScore(gameState.highScore));
+      gameState.rank = getRankForLevel(gameState.level);
+      saveProfileLocally();
+      updateProfileUI();
+    }
+
+    async function syncPlayerStats(eventName) {
+      const db = getFirestoreDb();
+      if (!db || !playerProfile.id) return;
+
+      try {
+        await db.collection('jugadores').doc(playerProfile.id).set(getFirestoreStats(eventName), { merge: true });
+        setProfileStatus('Estadísticas sincronizadas', 'text-emerald-300');
+      } catch (error) {
+        console.error('No se pudieron sincronizar las estadísticas.', error);
+        setProfileStatus('Pendiente de sincronización', 'text-amber-300');
+      }
+    }
+
+    function renderSchoolRanking(snapshot) {
+      const list = document.getElementById('rankingList');
+      list.replaceChildren();
+
+      if (snapshot.empty) {
+        const empty = document.createElement('li');
+        empty.className = 'py-6 text-center text-xs font-mono text-neutral-500';
+        empty.textContent = 'Aún no hay puntajes registrados.';
+        list.appendChild(empty);
+        return;
+      }
+
+      snapshot.docs.forEach((doc, index) => {
+        const data = doc.data();
+        const row = document.createElement('li');
+        row.className = 'grid grid-cols-[2rem_1fr_auto] items-center gap-2 p-2.5 rounded-lg bg-neutral-950 border border-neutral-800';
+
+        const position = document.createElement('span');
+        position.className = index < 3 ? 'font-cyber font-black text-amber-300' : 'font-mono text-neutral-500';
+        position.textContent = `#${index + 1}`;
+
+        const identity = document.createElement('div');
+        const nickname = document.createElement('p');
+        nickname.className = 'truncate font-cyber text-xs font-bold text-neutral-100';
+        nickname.textContent = data.nickname || 'Corredor anónimo';
+        const rank = document.createElement('p');
+        rank.className = 'text-[9px] font-mono text-cyan-300';
+        rank.textContent = `${data.rango || 'Aprendiz'} · Nivel ${Math.max(1, safeInt(data.nivel, 1))}`;
+        identity.append(nickname, rank);
+
+        const score = document.createElement('span');
+        score.className = 'font-mono text-sm font-bold text-emerald-300';
+        score.textContent = `${safeInt(data.mejorPuntaje, 0)} m`;
+
+        row.append(position, identity, score);
+        list.appendChild(row);
+      });
+    }
+
+    function stopSchoolRanking() {
+      if (playerProfile.rankingUnsubscribe) {
+        playerProfile.rankingUnsubscribe();
+        playerProfile.rankingUnsubscribe = null;
+      }
+    }
+
+    function startSchoolRanking() {
+      const db = getFirestoreDb();
+      const status = document.getElementById('rankingStatus');
+      if (!db) {
+        status.textContent = 'No fue posible conectar con Firestore.';
+        status.className = 'min-h-5 text-[10px] font-mono text-rose-400 mb-2';
+        return;
+      }
+
+      stopSchoolRanking();
+      status.textContent = 'Actualizando ranking en tiempo real…';
+      status.className = 'min-h-5 text-[10px] font-mono text-cyan-300 mb-2';
+      playerProfile.rankingUnsubscribe = db.collection('jugadores')
+        .orderBy('mejorPuntaje', 'desc')
+        .limit(10)
+        .onSnapshot((snapshot) => {
+          renderSchoolRanking(snapshot);
+          status.textContent = 'Actualizado en tiempo real';
+          status.className = 'min-h-5 text-[10px] font-mono text-emerald-300 mb-2';
+        }, (error) => {
+          console.error('No se pudo leer el ranking.', error);
+          status.textContent = 'No se pudo cargar el ranking.';
+          status.className = 'min-h-5 text-[10px] font-mono text-rose-400 mb-2';
+        });
+    }
+
+    // 5. JUGADOR
+    const player = {
+      lane: 0, // -1, 0, 1
+      targetX: 0,
+      currentX: 0,
+      y: 0,
+      vy: 0,
+      isGrounded: true,
+      isSliding: false,
+      slideTimeRemaining: 0,
+      width: 1.1,
+      height: 1.8,
+      invulnerableTime: 0,
+
+      update(dt) {
+        // Suavizado de cambio de carril (lerp rápido y elástico)
+        this.targetX = this.lane * LANE_WIDTH_3D;
+        this.currentX += (this.targetX - this.currentX) * Math.min(1, dt * 18);
+
+        // Física de salto
+        if (!this.isGrounded) {
+          this.vy -= GRAVITY * dt;
+          this.y += this.vy * dt;
+          if (this.y <= 0) {
+            this.y = 0;
+            this.vy = 0;
+            this.isGrounded = true;
+          }
+        }
+
+        // Estado de deslizamiento (slide)
+        if (this.isSliding) {
+          this.slideTimeRemaining -= dt;
+          this.height = 0.9; // Altura reducida para pasar por debajo de barreras altas
+          if (this.slideTimeRemaining <= 0) {
+            this.isSliding = false;
+            this.height = 1.8;
+          }
+        } else {
+          this.height = 1.8;
+        }
+
+        if (this.invulnerableTime > 0) {
+          this.invulnerableTime -= dt;
+        }
+      },
+
+      jump() {
+        if (gameState.status !== 'playing') return;
+        if (this.isGrounded && !this.isSliding) {
+          this.vy = JUMP_VELOCITY;
+          this.isGrounded = false;
+          audio.playJump();
+          if (gameState.currentMission === 1) gameState.tutorialActions.jump = true;
+        }
+      },
+
+      slide() {
+        if (gameState.status !== 'playing') return;
+        if (this.isGrounded) {
+          this.isSliding = true;
+          this.slideTimeRemaining = SLIDE_DURATION;
+          audio.playSlide();
+          if (gameState.currentMission === 1) gameState.tutorialActions.slide = true;
+        } else if (!this.isGrounded) {
+          // Fast drop hacia abajo
+          this.vy = -18;
+          this.isSliding = true;
+          this.slideTimeRemaining = SLIDE_DURATION;
+          audio.playSlide();
+          if (gameState.currentMission === 1) gameState.tutorialActions.slide = true;
+        }
+      },
+
+      moveLeft() {
+        if (gameState.status !== 'playing') return;
+        if (this.lane > -1) {
+          this.lane--;
+          audio.playJump();
+          if (gameState.currentMission === 1) gameState.tutorialActions.lane = true;
+        }
+      },
+
+      moveRight() {
+        if (gameState.status !== 'playing') return;
+        if (this.lane < 1) {
+          this.lane++;
+          audio.playJump();
+          if (gameState.currentMission === 1) gameState.tutorialActions.lane = true;
+        }
+      }
+    };
+
+    // 6. EL TOQUE SECRETO: DRON POLICIAL DE PERSECUCIÓN AUTOMATIZADO
+    const policeDrone = {
+      zDistance: 16.0, // Metros detrás del jugador (en coordenada de persecución)
+      minDistance: 3.5, // Distancia crítica de captura
+      maxDistance: 20.0,
+      dangerLevel: 0.2, // 0.0 (lejos) a 1.0 (captura inminente)
+      strobePhase: 0,
+      sirenTimer: 0,
+
+      update(dt, playerSpeed) {
+        this.strobePhase += dt * 10;
+        this.sirenTimer += dt;
+
+        // Si el jugador comete un tropiezo o baja la velocidad, el dron acorta distancia
+        if (this.dangerLevel > 0.6 && this.sirenTimer > 1.2) {
+          audio.playSiren();
+          this.sirenTimer = 0;
+        }
+
+        // La velocidad del jugador hace retroceder al dron
+        if (playerSpeed > gameState.baseSpeed + 4) {
+          this.zDistance = Math.min(this.maxDistance, this.zDistance + dt * 1.5);
+        }
+
+        // Nivel de peligro basado en distancia relativa
+        this.dangerLevel = 1.0 - (this.zDistance - this.minDistance) / (this.maxDistance - this.minDistance);
+        this.dangerLevel = Math.max(0.05, Math.min(1.0, this.dangerLevel));
+      },
+
+      triggerStumble() {
+        // Tropiezo del jugador: el dron se abalanza
+        this.zDistance = Math.max(this.minDistance + 0.8, this.zDistance - 4.5);
+        audio.playSiren();
+      }
+    };
+
+    // 7. LISTAS DE ENTIDADES ACTIVAS (OBSTÁCULOS, MONEDAS, PARTÍCULAS)
+    let obstacles = [];
+    let collectibles = [];
+    let particles = [];
+    let floatingTexts = [];
+    let spawnTimer = 0;
+
+    const TRANSMILENIO_ROUTES = ['B75 PORTAL NORTE', 'K10 EL DORADO', 'H74 USME', 'C19 SUBA', 'F28 AMÉRICAS', 'M86 AEROPUERTO'];
+
+    function spawnWorldEntities() {
+      const mission = MISSIONS[gameState.currentMission - 1];
+      if (mission.number === 1 && gameState.missionDistance < 120) return;
+      const spawnZ = 120; // Aparecen en la lejanía sobre el horizonte
+
+      // Elegir carril aleatorio
+      const lane = LANES[Math.floor(Math.random() * LANES.length)];
+      const randType = Math.random();
+
+      // Cada misión aumenta la densidad del tráfico.
+      if (randType < mission.obstacleChance) {
+        const obsTypeRand = Math.random();
+        
+        if (mission.number === 1 && obsTypeRand < 0.50) {
+          // El tutorial introduce primero obstáculos que se esquivan de carril.
+          obstacles.push({ type: 'taxi', lane, x: lane * LANE_WIDTH_3D,
+            y: 0.2, z: spawnZ, width: 1.8, height: 1.6, length: 4.0, speedRelative: 6.0 });
+        } else if (mission.number === 1) {
+          const high = gameState.missionDistance >= 300 && obsTypeRand > 0.80;
+          obstacles.push({ type: high ? 'barrier_high' : 'barrier_low', lane,
+            x: lane * LANE_WIDTH_3D, y: 0, z: spawnZ, width: 2.4,
+            height: high ? 2.2 : 1.1, length: 0.8, speedRelative: 0 });
+        } else if (obsTypeRand < 0.40) {
+          // TransMilenio Volador Articulado
+          obstacles.push({
+            type: 'transmilenio',
+            lane: lane,
+            x: lane * LANE_WIDTH_3D,
+            y: 0.3,
+            z: spawnZ,
+            width: 2.2,
+            height: 2.4,
+            length: 12.0,
+            route: TRANSMILENIO_ROUTES[Math.floor(Math.random() * TRANSMILENIO_ROUTES.length)],
+            speedRelative: 4.0 // Avanza en contra
+          });
+        } else if (obsTypeRand < 0.70) {
+          // Taxi Flotante Cuántico
+          obstacles.push({
+            type: 'taxi',
+            lane: lane,
+            x: lane * LANE_WIDTH_3D,
+            y: 0.2,
+            z: spawnZ,
+            width: 1.8,
+            height: 1.6,
+            length: 4.0,
+            speedRelative: 6.0
+          });
+        } else if (obsTypeRand < 0.86) {
+          // Barrera Policial de Neón Baja (Exige Salto)
+          obstacles.push({
+            type: 'barrier_low',
+            lane: lane,
+            x: lane * LANE_WIDTH_3D,
+            y: 0,
+            z: spawnZ,
+            width: 2.4,
+            height: 1.1,
+            length: 0.8,
+            speedRelative: 0
+          });
+        } else {
+          // Barrera Policial de Neón Alta con Escáner Láser (Exige Deslizarse / Slide)
+          obstacles.push({
+            type: 'barrier_high',
+            lane: lane,
+            x: lane * LANE_WIDTH_3D,
+            y: 0, // Los postes arrancan en la pista; el láser se ubica en renderObstacle
+            z: spawnZ,
+            width: 2.4,
+            height: 2.2,
+            length: 0.8,
+            speedRelative: 0
+          });
+        }
+      } else {
+        // Coleccionables: Cripto-Pesos o Llave de Hackeo
+        const isKey = Math.random() < 0.12; // 12% probabilidad de Llave Dorada
+        const count = isKey ? 1 : Math.floor(Math.random() * 3) + 2;
+
+        for (let i = 0; i < count; i++) {
+          collectibles.push({
+            type: isKey ? 'key' : 'coin',
+            lane: lane,
+            x: lane * LANE_WIDTH_3D,
+            y: 0.9,
+            z: spawnZ + i * 4.5,
+            rotation: Math.random() * Math.PI * 2,
+            collected: false
+          });
+        }
+      }
+    }
+
+    function addParticle(x, y, z, vx, vy, vz, color, life = 0.6) {
+      particles.push({ x, y, z, vx, vy, vz, color, life, maxLife: life });
+    }
+
+    function addFloatingText(text, x, y, z, color) {
+      floatingTexts.push({ text, x, y, z, life: 1.0, color });
+    }
+
+    // 8. FÓRMULA MATEMÁTICA DE INFLACIÓN HACKER (TOQUE SECRETO)
+    function calculateInflationCost(resurrections, distance) {
+      // Costo = 2^resurrecciones + floor(distancia / 1500)
+      const basePow = Math.pow(2, resurrections);
+      const distanceInflator = Math.floor(distance / 1500);
+      return Math.max(1, basePow + distanceInflator);
+    }
+
+    // 9. COLISIONES
+    function getPlayerHitbox() {
+      const bottom = player.y + PLAYER_HITBOX.footInset;
+      return {
+        minX: player.currentX - PLAYER_HITBOX.halfWidth,
+        maxX: player.currentX + PLAYER_HITBOX.halfWidth,
+        minY: bottom,
+        maxY: bottom + (player.isSliding ? PLAYER_HITBOX.slidingHeight : PLAYER_HITBOX.standingHeight),
+        halfDepth: PLAYER_HITBOX.halfDepth
+      };
+    }
+
+    function getObstacleHitbox(obs) {
+      // Las medidas coinciden con los píxeles que se dibujan en renderObstacle:
+      // 48 px equivalen a una unidad del mundo cuando el objeto está en z = 0.
+      if (obs.type === 'barrier_low') {
+        return { halfWidth: 0.84, halfDepth: 0.42, minY: 0.05, maxY: 0.54 };
+      }
+
+      if (obs.type === 'barrier_high') {
+        // Solo el rayo láser es letal. Los postes visibles quedan a los lados.
+        return { halfWidth: 0.72, halfDepth: 0.42, minY: 0.77, maxY: 0.94 };
+      }
+
+      if (obs.type === 'transmilenio') {
+        return { halfWidth: 0.70, halfDepth: 0.80, minY: 0.38, maxY: 1.68 };
+      }
+
+      if (obs.type === 'taxi') {
+        return { halfWidth: 0.50, halfDepth: 0.65, minY: 0.24, maxY: 1.10 };
+      }
+
+      return {
+        halfWidth: (obs.width || 1) / 2,
+        halfDepth: (obs.length || 1) / 2,
+        minY: obs.y || 0,
+        maxY: (obs.y || 0) + (obs.height || 1)
+      };
+    }
+
+    function checkCollisions() {
+      const playerZ = 0; // El jugador está en z = 0 relativo a la cámara
+      const playerHitbox = getPlayerHitbox();
+
+      // La invulnerabilidad evita impactos, pero permite recoger monedas y llaves.
+      for (let i = 0; player.invulnerableTime <= 0 && i < obstacles.length; i++) {
+        const obs = obstacles[i];
+        const obstacleHitbox = getObstacleHitbox(obs);
+        const overlapsZ = Math.abs(obs.z - playerZ) < obstacleHitbox.halfDepth + playerHitbox.halfDepth;
+        const overlapsX = playerHitbox.maxX > obs.x - obstacleHitbox.halfWidth &&
+          playerHitbox.minX < obs.x + obstacleHitbox.halfWidth;
+        const overlapsY = playerHitbox.maxY > obstacleHitbox.minY &&
+          playerHitbox.minY < obstacleHitbox.maxY;
+
+        if (overlapsZ && overlapsX && overlapsY) {
+          // Si tiene escudo EMP activo, destruye el obstáculo sin morir
+          if (gameState.hasShield) {
+            gameState.hasShield = false;
+            player.invulnerableTime = 1.5;
+            audio.playCrash();
+            addFloatingText('¡ESCUDO DESTRUIDO!', player.currentX, player.y + 2, 0, '#00f0ff');
+            for (let p = 0; p < 20; p++) {
+              addParticle(obs.x, obs.y + 1, obs.z, (Math.random()-0.5)*10, Math.random()*10, (Math.random()-0.5)*10, '#00f0ff');
+            }
+            obstacles.splice(i, 1);
+            return;
+          }
+
+          // Colisión fatal: disparar protocolo de captura e inflación
+          handlePlayerCrash(obs);
+          return;
+        }
+      }
+
+      // Chequear recolección de monedas y llaves
+      for (let i = 0; i < collectibles.length; i++) {
+        const item = collectibles[i];
+        if (item.collected) continue;
+
+        const zDist = Math.abs(item.z - playerZ);
+        if (zDist < 1.4) {
+          const xDist = Math.abs(item.x - player.currentX);
+          const yDist = Math.abs(item.y - (player.y + 0.8));
+
+          if (xDist < 1.3 && yDist < 1.6) {
+            item.collected = true;
+
+            if (item.type === 'coin') {
+              gameState.coins += 1;
+              gameState.totalCoins += 1;
+              audio.playCoin();
+              addFloatingText('+1 ₧', item.x, item.y + 0.5, item.z, '#ffe600');
+            } else if (item.type === 'key') {
+              gameState.hackKeys += 1;
+              audio.playKey();
+              addFloatingText('+1 LLAVE HACK', item.x, item.y + 0.8, item.z, '#00f0ff');
+            }
+            saveWalletLocally();
+
+            // Partículas de recolección
+            for (let p = 0; p < 8; p++) {
+              addParticle(item.x, item.y, item.z, (Math.random() - 0.5) * 6, Math.random() * 6, (Math.random() - 0.5) * 6, item.type === 'key' ? '#00f0ff' : '#ffe600');
+            }
+          }
+        }
+      }
+    }
+
+    function handlePlayerCrash(obstacle) {
+      if (gameState.status !== 'playing') return;
+      if (gameOverSequenceActive) return;
+
+      audio.playCrash();
+      policeDrone.triggerStumble();
+
+      // Registrar la muerte y el progreso antes de cerrar la misión.
+      gameState.deaths += 1;
+      recordRunProgress();
+      void syncPlayerStats('muerte');
+
+      if (gameState.status !== 'playing') return;
+
+      // Mensaje de la causa
+      let causeText = 'Colisión con vehículo autónomo';
+      if (obstacle.type === 'transmilenio') causeText = 'Impacto contra TransMilenio ruta ' + obstacle.route;
+      else if (obstacle.type === 'taxi') causeText = 'Colisión con Taxi Flotante Cuántico';
+      else if (obstacle.type === 'barrier_low') causeText = 'Tropezón contra Barrera Policial Baja';
+      else if (obstacle.type === 'barrier_high') causeText = 'Escáner Policial de Neón detectó tu altura';
+      gameState.gameOverCause = causeText;
+
+      // Calcular costo de inflación para revivir
+      gameState.resurrectCost = calculateInflationCost(gameState.resurrectionCount, gameState.distance);
+
+      gameState.status = 'gameover';
+      triggerGameOverMedia();
+    }
+
+    // 10. MOTOR DE RENDERIZADO 2D PSEUDO-3D
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d', { alpha: false });
+    let viewWidth = window.innerWidth;
+    let viewHeight = window.innerHeight;
+
+    function resizeCanvas() {
+      viewWidth = window.innerWidth;
+      viewHeight = window.innerHeight;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2); // Cap a 2 para colegios y bajo consumo
+      canvas.width = viewWidth * dpr;
+      canvas.height = viewHeight * dpr;
+      ctx.scale(dpr, dpr);
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // Proyección de coordenadas 3D a pantalla 2D
+    function project(x, y, z) {
+      if (z <= -FOV + 1) return null;
+      const scale = FOV / (FOV + z * 10);
+      const horizonY = viewHeight * HORIZON_RATIO;
+      const screenX = viewWidth / 2 + x * scale * 48;
+      const screenY = horizonY + (CAMERA_HEIGHT - y) * scale * 48;
+      return { x: screenX, y: screenY, scale: scale };
+    }
+
+    function drawCoverImage(img, x, y, width, height, focalX = 0.5, focalY = 0.5) {
+      const imageWidth = img.naturalWidth;
+      const imageHeight = img.naturalHeight;
+      if (!imageWidth || !imageHeight) return;
+      const sourceRatio = imageWidth / imageHeight;
+      const targetRatio = width / height;
+      const sourceWidth = sourceRatio > targetRatio ? imageHeight * targetRatio : imageWidth;
+      const sourceHeight = sourceRatio > targetRatio ? imageHeight : imageWidth / targetRatio;
+      ctx.drawImage(img, (imageWidth - sourceWidth) * focalX, (imageHeight - sourceHeight) * focalY,
+        sourceWidth, sourceHeight, x, y, width, height);
+    }
+
+    function renderInterchangeSkyline(time) {
+      const horizonY = viewHeight * HORIZON_RATIO;
+      const sky = ctx.createLinearGradient(0, 0, 0, horizonY);
+      sky.addColorStop(0, '#140b20');
+      sky.addColorStop(0.62, '#39203c');
+      sky.addColorStop(1, '#8a3b46');
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, viewWidth, horizonY);
+
+      const glow = ctx.createRadialGradient(viewWidth * 0.72, horizonY * 0.48, 5,
+        viewWidth * 0.72, horizonY * 0.48, horizonY * 0.55);
+      glow.addColorStop(0, 'rgba(255, 174, 96, 0.36)');
+      glow.addColorStop(1, 'rgba(255, 174, 96, 0)');
+      ctx.fillStyle = glow;
+      ctx.fillRect(0, 0, viewWidth, horizonY);
+
+      // Edificios y dos pasos elevados que forman el nudo vial.
+      const block = Math.max(25, viewWidth / 24);
+      for (let i = 0; i * block < viewWidth; i++) {
+        const height = 45 + ((i * 53) % 105);
+        const x = i * block;
+        ctx.fillStyle = i % 3 === 0 ? '#201427' : '#180f20';
+        ctx.fillRect(x, horizonY - height, block + 1, height);
+        ctx.fillStyle = i % 2 === 0 ? 'rgba(255, 157, 91, 0.58)' : 'rgba(186, 118, 255, 0.5)';
+        for (let row = 12; row < height - 8; row += 16) {
+          ctx.fillRect(x + 6, horizonY - height + row, 3, 5);
+          ctx.fillRect(x + block - 8, horizonY - height + row, 3, 5);
+        }
+      }
+
+      const bridges = [
+        { y: horizonY * 0.62, bend: -30, color: '#b670ff' },
+        { y: horizonY * 0.82, bend: 24, color: '#ffad65' }
+      ];
+      bridges.forEach((bridge, index) => {
+        ctx.beginPath();
+        ctx.moveTo(-30, bridge.y + bridge.bend);
+        ctx.bezierCurveTo(viewWidth * 0.32, bridge.y - 44, viewWidth * 0.7, bridge.y + 35,
+          viewWidth + 30, bridge.y - bridge.bend);
+        ctx.strokeStyle = '#100c1d';
+        ctx.lineWidth = 22 - index * 5;
+        ctx.stroke();
+        ctx.strokeStyle = bridge.color;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      });
+
+      for (let i = 0; i < 7; i++) {
+        const x = ((time * (18 + i * 2) + i * 143) % (viewWidth + 90)) - 45;
+        ctx.fillStyle = i % 2 ? '#ffcb84' : '#c592ff';
+        ctx.fillRect(x, horizonY * (i % 2 ? 0.79 : 0.59), 11, 2);
+      }
+      ctx.fillStyle = 'rgba(255, 180, 105, 0.3)';
+      ctx.fillRect(0, horizonY - 2, viewWidth, 2);
+    }
+
+    function renderSiegeSkyline(time) {
+      const horizonY = viewHeight * HORIZON_RATIO;
+      const sky = ctx.createLinearGradient(0, 0, 0, horizonY);
+      sky.addColorStop(0, '#080610');
+      sky.addColorStop(0.55, '#270c23');
+      sky.addColorStop(1, '#6f182c');
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, viewWidth, horizonY);
+
+      const pulse = 0.55 + Math.sin(time * 2.5) * 0.15;
+      const glow = ctx.createRadialGradient(viewWidth * 0.5, horizonY * 0.75, 10,
+        viewWidth * 0.5, horizonY * 0.75, horizonY * 0.8);
+      glow.addColorStop(0, `rgba(255, 57, 99, ${pulse})`);
+      glow.addColorStop(1, 'rgba(255, 57, 99, 0)');
+      ctx.fillStyle = glow;
+      ctx.fillRect(0, 0, viewWidth, horizonY);
+
+      const block = Math.max(24, viewWidth / 28);
+      for (let i = 0; i * block < viewWidth; i++) {
+        const height = 55 + ((i * 67) % 130);
+        const x = i * block;
+        ctx.fillStyle = i % 2 ? '#130c18' : '#1c0b18';
+        ctx.fillRect(x, horizonY - height, block + 2, height);
+        ctx.fillStyle = 'rgba(255, 78, 103, 0.55)';
+        for (let row = 13; row < height - 7; row += 19) {
+          ctx.fillRect(x + 5, horizonY - height + row, 3, 5);
+        }
+      }
+
+      // Torre de vigilancia y haces de búsqueda en la zona final.
+      const towerX = viewWidth * 0.53;
+      ctx.fillStyle = '#0b0b16';
+      ctx.fillRect(towerX - 19, horizonY - 190, 38, 190);
+      ctx.fillRect(towerX - 32, horizonY - 165, 64, 24);
+      ctx.fillStyle = '#ff4d72';
+      ctx.fillRect(towerX - 23, horizonY - 157, 46, 5);
+      ctx.fillStyle = `rgba(255, 68, 110, ${0.18 + pulse * 0.16})`;
+      ctx.beginPath();
+      ctx.moveTo(towerX, horizonY - 150);
+      ctx.lineTo(towerX + Math.sin(time * 0.9) * viewWidth * 0.42 - 80, horizonY);
+      ctx.lineTo(towerX + Math.sin(time * 0.9) * viewWidth * 0.42 + 80, horizonY);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255, 83, 107, 0.5)';
+      ctx.fillRect(0, horizonY - 2, viewWidth, 2);
+    }
+
+    // Cada misión usa un horizonte distinto; la primera aprovecha la ilustración existente.
+    function renderSkyline(time) {
+      const horizonY = viewHeight * HORIZON_RATIO;
+      if (gameState.currentMission === 2) return renderInterchangeSkyline(time);
+      if (gameState.currentMission === 3) return renderSiegeSkyline(time);
+      if (loadedImages.intro) {
+        drawCoverImage(loadedImages.intro, 0, 0, viewWidth, horizonY, 0.5, 0.2);
+        const shade = ctx.createLinearGradient(0, 0, 0, horizonY);
+        shade.addColorStop(0, 'rgba(4, 11, 29, 0.24)');
+        shade.addColorStop(1, 'rgba(4, 11, 29, 0.56)');
+        ctx.fillStyle = shade;
+        ctx.fillRect(0, 0, viewWidth, horizonY);
+        ctx.fillStyle = 'rgba(76, 226, 255, 0.65)';
+        ctx.fillRect(0, horizonY - 2, viewWidth, 2);
+        return;
+      }
+
+      // Cielo nocturno Bogotá Cyberpunk
+      const skyGradient = ctx.createLinearGradient(0, 0, 0, horizonY);
+      skyGradient.addColorStop(0, '#03050c');
+      skyGradient.addColorStop(0.6, '#090d20');
+      skyGradient.addColorStop(1, '#1b122c');
+      ctx.fillStyle = skyGradient;
+      ctx.fillRect(0, 0, viewWidth, horizonY);
+
+      // Cerros Orientales de Monserrate (Silueta montaÃ±osa con torre láser)
+      ctx.fillStyle = '#070913';
+      ctx.beginPath();
+      ctx.moveTo(0, horizonY);
+      ctx.lineTo(viewWidth * 0.1, horizonY - 45);
+      ctx.lineTo(viewWidth * 0.28, horizonY - 110);
+      ctx.lineTo(viewWidth * 0.35, horizonY - 75);
+      ctx.lineTo(viewWidth * 0.55, horizonY - 125); // Cima Monserrate
+      ctx.lineTo(viewWidth * 0.72, horizonY - 60);
+      ctx.lineTo(viewWidth * 0.9, horizonY - 95);
+      ctx.lineTo(viewWidth, horizonY - 40);
+      ctx.lineTo(viewWidth, horizonY);
+      ctx.closePath();
+      ctx.fill();
+
+      // Torre de transmisión láser en la cima de Monserrate
+      const monserrateX = viewWidth * 0.55;
+      const monserrateY = horizonY - 125;
+      ctx.strokeStyle = '#00f0ff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(monserrateX, monserrateY);
+      ctx.lineTo(monserrateX, monserrateY - 40);
+      ctx.stroke();
+
+      // Haz de láser de comunicaciones de Monserrate apuntando al cielo
+      ctx.strokeStyle = 'rgba(0, 240, 255, 0.4)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(monserrateX, monserrateY - 40);
+      ctx.lineTo(monserrateX - 100, 0);
+      ctx.stroke();
+
+      // Edificios del Centro Internacional & Torre Colpatria
+      const buildingWidth = 36;
+      for (let i = 0; i < 18; i++) {
+        const bx = i * (viewWidth / 17);
+        const bHeight = 70 + ((i * 37) % 90);
+        const by = horizonY - bHeight;
+
+        ctx.fillStyle = i % 2 === 0 ? '#0c101d' : '#080b14';
+        ctx.fillRect(bx, by, buildingWidth, bHeight);
+
+        // Ventanas neón parpadeantes
+        ctx.fillStyle = i % 3 === 0 ? 'rgba(0, 240, 255, 0.5)' : 'rgba(255, 230, 0, 0.4)';
+        for (let w = 0; w < bHeight - 10; w += 14) {
+          ctx.fillRect(bx + 6, by + 8 + w, 4, 6);
+          ctx.fillRect(bx + 18, by + 8 + w, 4, 6);
+        }
+
+        // Torre Colpatria Futurista (Edificio alto central con pantallas LED verticales)
+        if (i === 8) {
+          const colpatriaH = 170;
+          const colpatriaY = horizonY - colpatriaH;
+          ctx.fillStyle = '#060812';
+          ctx.fillRect(bx - 10, colpatriaY, buildingWidth + 20, colpatriaH);
+
+          // Rayas LED animadas de la Colpatria
+          const ledPhase = (time * 3) % 4;
+          const colpatriaColor = ledPhase < 1 ? '#00f0ff' : ledPhase < 2 ? '#ff0055' : ledPhase < 3 ? '#ffe600' : '#00ff88';
+          ctx.strokeStyle = colpatriaColor;
+          ctx.lineWidth = 2;
+          for (let ly = colpatriaY + 10; ly < horizonY - 10; ly += 12) {
+            ctx.beginPath();
+            ctx.moveTo(bx - 6, ly);
+            ctx.lineTo(bx + buildingWidth + 16, ly);
+            ctx.stroke();
+          }
+        }
+      }
+
+      // Tráfico aéreo lejano (luces rojas y cian flotando por la ciudad)
+      for (let f = 0; f < 6; f++) {
+        const fx = ((time * 30 + f * 120) % (viewWidth + 100)) - 50;
+        const fy = horizonY - 50 - (f * 15);
+        ctx.fillStyle = f % 2 === 0 ? '#ff0055' : '#00f0ff';
+        ctx.beginPath();
+        ctx.arc(fx, fy, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Línea de horizonte de neón
+      ctx.strokeStyle = 'rgba(0, 240, 255, 0.5)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(0, horizonY);
+      ctx.lineTo(viewWidth, horizonY);
+      ctx.stroke();
+    }
+
+    // Render de la Autopista Elevada Suspendida en 3D
+    function renderHighway(roadOffsetZ) {
+      const horizonY = viewHeight * HORIZON_RATIO;
+      const groundH = viewHeight - horizonY;
+      const theme = SCENE_THEMES[gameState.currentMission - 1];
+
+      // Abismo de la ciudad debajo
+      const abyssGrad = ctx.createLinearGradient(0, horizonY, 0, viewHeight);
+      abyssGrad.addColorStop(0, theme.abyssTop);
+      abyssGrad.addColorStop(1, theme.abyssBottom);
+      ctx.fillStyle = abyssGrad;
+      ctx.fillRect(0, horizonY, viewWidth, groundH);
+
+      // Dibujar segmentos de la pista en perspectiva (desde el fondo hacia adelante)
+      const maxZ = 120;
+      const stepZ = 3;
+
+      for (let z = maxZ; z >= 0; z -= stepZ) {
+        const p1 = project(-ROAD_WIDTH_3D / 2, 0, z);
+        const p2 = project(ROAD_WIDTH_3D / 2, 0, z);
+        const p3 = project(ROAD_WIDTH_3D / 2, 0, z + stepZ);
+        const p4 = project(-ROAD_WIDTH_3D / 2, 0, z + stepZ);
+
+        if (!p1 || !p2 || !p3 || !p4) continue;
+
+        // Efecto de cuadrícula que se desplaza con la velocidad
+        const isSegmentAlt = Math.floor((z + roadOffsetZ) / 6) % 2 === 0;
+
+        ctx.fillStyle = isSegmentAlt ? theme.roadA : theme.roadB;
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.lineTo(p3.x, p3.y);
+        ctx.lineTo(p4.x, p4.y);
+        ctx.closePath();
+        ctx.fill();
+
+        // Bordes de Neón de la Autopista (Cian a la izquierda, Magenta a la derecha)
+        ctx.strokeStyle = theme.edgeLeft;
+        ctx.lineWidth = Math.max(1, p1.scale * 4);
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p4.x, p4.y);
+        ctx.stroke();
+
+        ctx.strokeStyle = theme.edgeRight;
+        ctx.lineWidth = Math.max(1, p2.scale * 4);
+        ctx.beginPath();
+        ctx.moveTo(p2.x, p2.y);
+        ctx.lineTo(p3.x, p3.y);
+        ctx.stroke();
+
+        // Líneas divisorias de los 3 carriles
+        [-LANE_WIDTH_3D / 2, LANE_WIDTH_3D / 2].forEach(laneX => {
+          const lp1 = project(laneX, 0, z);
+          const lp2 = project(laneX, 0, z + stepZ);
+          if (lp1 && lp2 && isSegmentAlt) {
+            ctx.strokeStyle = theme.lane;
+            ctx.lineWidth = Math.max(1, lp1.scale * 2.5);
+            ctx.beginPath();
+            ctx.moveTo(lp1.x, lp1.y);
+            ctx.lineTo(lp2.x, lp2.y);
+            ctx.stroke();
+          }
+        });
+      }
+    }
+
+    // Render del Jugador (Cyber Runner)
+    function renderPlayer(time) {
+      const p = project(player.currentX, player.y, 0);
+      if (!p) return;
+
+      const scale = p.scale;
+      // runner1/runner2 crecen, pero slide.png conserva una silueta baja que
+      // coincide con la caja física usada para atravesar el láser.
+      const spriteScale = player.isSliding ? 1 : RUNNER_SPRITE_SCALE;
+      const w = 48 * scale * spriteScale;
+      const h = (player.isSliding ? 32 : 64) * scale * spriteScale;
+      const x = p.x - w / 2;
+      const y = p.y - h;
+
+      // Parpadeo de invulnerabilidad tras revivir
+      if (player.invulnerableTime > 0 && Math.floor(time * 12) % 2 === 0) {
+        return;
+      }
+
+      // Aura / Escudo de protección EMP
+      if (gameState.hasShield || player.invulnerableTime > 0) {
+        ctx.strokeStyle = 'rgba(0, 240, 255, 0.8)';
+        ctx.lineWidth = 3 * scale;
+        ctx.beginPath();
+        ctx.ellipse(p.x, p.y - h / 2, w * 0.9, h * 0.7, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Sombra proyectada en la pista
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y, w * 0.6, 6 * scale, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // El asset dedicado se usa en cuanto se activa el deslizamiento (abajo / S).
+      if (player.isSliding && loadedImages.slide) {
+        ctx.drawImage(loadedImages.slide, x, y, w, h);
+        return;
+      }
+
+      // Render por frames si existen los sprites assets/images/runner1.png y runner2.png
+      const runnerFrames = getRunnerFrames();
+      if (runnerFrames.length > 0) {
+        let frameIndex;
+        if (!player.isGrounded || player.isSliding) {
+          // En el aire o deslizando no hay ciclo de carrera: se congela un frame
+          frameIndex = RUNNER_ANIM.airFrame % runnerFrames.length;
+        } else {
+          // Alterna runner1 / runner2; el ciclo se acelera con la velocidad del juego
+          const cadence = RUNNER_ANIM.frameDuration / Math.max(0.5, gameState.speed / gameState.baseSpeed);
+          frameIndex = Math.floor(time / cadence) % runnerFrames.length;
+        }
+        ctx.drawImage(runnerFrames[frameIndex], x, y, w, h);
+        return;
+      }
+
+      // Render Procedural Vectorial del Cyber-Runner
+      if (player.isSliding) {
+        // Postura en cuclillas / deslizamiento
+        ctx.fillStyle = '#00f0ff';
+        ctx.fillRect(x, y + h * 0.4, w, h * 0.6);
+        // Estela de chispas
+        ctx.fillStyle = '#ffe600';
+        ctx.fillRect(x - 10 * scale, y + h * 0.8, 12 * scale, 3 * scale);
+      } else {
+        // Torso / Chaqueta cibernética
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(x + w * 0.2, y + h * 0.28, w * 0.6, h * 0.45);
+
+        // Líneas de neón en la espalda
+        ctx.strokeStyle = '#00f0ff';
+        ctx.lineWidth = 2 * scale;
+        ctx.strokeRect(x + w * 0.25, y + h * 0.32, w * 0.5, h * 0.35);
+
+        // Cabeza / Casco cibernético con visor cian
+        ctx.fillStyle = '#0f172a';
+        ctx.beginPath();
+        ctx.arc(p.x, y + h * 0.18, w * 0.26, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#00f0ff';
+        ctx.fillRect(p.x - w * 0.18, y + h * 0.15, w * 0.36, 4 * scale);
+
+        // Piernas con animación de carrera
+        const runCycle = Math.sin(time * 24);
+        ctx.fillStyle = '#090d16';
+        if (player.isGrounded) {
+          ctx.fillRect(x + w * 0.25, y + h * 0.72, w * 0.2, (h * 0.28) + runCycle * 4 * scale);
+          ctx.fillRect(x + w * 0.55, y + h * 0.72, w * 0.2, (h * 0.28) - runCycle * 4 * scale);
+        } else {
+          // Postura de salto
+          ctx.fillRect(x + w * 0.2, y + h * 0.7, w * 0.24, h * 0.2);
+          ctx.fillRect(x + w * 0.56, y + h * 0.65, w * 0.24, h * 0.2);
+        }
+      }
+    }
+
+    // Render del Dron Policial de Persecución (POL-METRO 2080)
+    function renderPoliceDrone(time) {
+      // El dron vuela justo detrás y arriba del corredor
+      const droneZ = -policeDrone.zDistance;
+      const p = project(player.currentX * 0.6, 3.8 + Math.sin(time * 6) * 0.25, droneZ);
+      if (!p) return;
+
+      const scale = p.scale;
+      const w = 90 * scale;
+      const h = 42 * scale;
+      const x = p.x - w / 2;
+      const y = p.y - h / 2;
+
+      // Haz de láser rojo de fijación apuntando al corredor
+      const targetP = project(player.currentX, player.y + 0.8, 0);
+      if (targetP) {
+        ctx.strokeStyle = 'rgba(255, 0, 85, 0.4)';
+        ctx.lineWidth = 2 * scale;
+        ctx.setLineDash([6 * scale, 4 * scale]);
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(targetP.x, targetP.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // Render si existe sprite de assets/images/drone.png
+      // Se dibuja alargado conservando la proporción real del archivo (naturalWidth / naturalHeight)
+      if (loadedImages.drone) {
+        const droneImg = loadedImages.drone;
+        const natW = droneImg.naturalWidth || droneImg.width || w;
+        const natH = droneImg.naturalHeight || droneImg.height || h;
+        const aspect = natW / natH;
+        const drawW = w * DRONE_SPRITE_STRETCH * DRONE_SPRITE_SCALE;
+        const drawH = drawW / aspect; // altura derivada: nunca se deforma la imagen
+        ctx.drawImage(droneImg, p.x - drawW / 2, p.y - drawH / 2, drawW, drawH);
+        return;
+      }
+
+      // Render Procedural Vectorial del Dron Policial
+      // Chasis blindado negro mate
+      ctx.fillStyle = '#121624';
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y, w * 0.45, h * 0.35, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 2 * scale;
+      ctx.stroke();
+
+      // 4 Rotores / Turbinas de levitación magnética
+      const rotorPositions = [
+        { rx: p.x - w * 0.4, ry: p.y - h * 0.3 },
+        { rx: p.x + w * 0.4, ry: p.y - h * 0.3 },
+        { rx: p.x - w * 0.4, ry: p.y + h * 0.3 },
+        { rx: p.x + w * 0.4, ry: p.y + h * 0.3 }
+      ];
+
+      rotorPositions.forEach(rot => {
+        ctx.fillStyle = '#00f0ff';
+        ctx.beginPath();
+        ctx.ellipse(rot.rx, rot.ry, 8 * scale, 3 * scale, 0, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Estrobos policiales rojo / azul alternados
+      const strobe = Math.floor(policeDrone.strobePhase) % 2 === 0;
+      ctx.fillStyle = strobe ? '#ff0055' : '#00f0ff';
+      ctx.beginPath();
+      ctx.arc(p.x - 12 * scale, p.y, 4 * scale, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = strobe ? '#00f0ff' : '#ff0055';
+      ctx.beginPath();
+      ctx.arc(p.x + 12 * scale, p.y, 4 * scale, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Rótulo de identificación POL-METRO 2080
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `bold ${Math.max(7, Math.floor(9 * scale))}px Orbitron, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText('POLICÍA 2080', p.x, p.y + 12 * scale);
+    }
+
+    // Render de Obstáculos
+    function renderObstacle(obs) {
+      // La barrera de deslizamiento es un pórtico: su base está en la pista.
+      // Esto también corrige entidades que se hubieran creado con la altura antigua.
+      const renderY = obs.type === 'barrier_high' ? 0 : obs.y;
+      const p = project(obs.x, renderY, obs.z);
+      if (!p) return;
+
+      const scale = p.scale;
+
+      if (obs.type === 'transmilenio') {
+        const w = 75 * scale;
+        const h = 70 * scale;
+        const x = p.x - w / 2;
+        const y = p.y - h;
+
+        if (drawTrimmedSprite('transmilenio', x, y, w, h)) return;
+
+        // TransMilenio Volador Bi-articulado Bogotá 2080
+        // Carrocería roja institucional de Bogotá
+        ctx.fillStyle = '#dc2626';
+        ctx.fillRect(x, y, w, h * 0.85);
+
+        // Ventanas y parabrisas panorámico
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(x + 4 * scale, y + 6 * scale, w - 8 * scale, h * 0.32);
+
+        // Tablero LED frontal de Ruta TransMilenio
+        ctx.fillStyle = '#ffe600';
+        ctx.font = `bold ${Math.max(6, Math.floor(8 * scale))}px "Share Tech Mono", monospace`;
+        ctx.textAlign = 'center';
+        ctx.fillText(obs.route, p.x, y + 16 * scale);
+
+        // Franja inferior plateada y turbinas magnéticas azules
+        ctx.fillStyle = '#334155';
+        ctx.fillRect(x, y + h * 0.82, w, h * 0.18);
+        ctx.fillStyle = '#00f0ff';
+        ctx.fillRect(x + 8 * scale, y + h - 2 * scale, 16 * scale, 3 * scale);
+        ctx.fillRect(x + w - 24 * scale, y + h - 2 * scale, 16 * scale, 3 * scale);
+
+        // Luces LED frontales
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(x + 4 * scale, y + h * 0.65, 8 * scale, 6 * scale);
+        ctx.fillRect(x + w - 12 * scale, y + h * 0.65, 8 * scale, 6 * scale);
+
+      } else if (obs.type === 'taxi') {
+        const w = 55 * scale;
+        const h = 48 * scale;
+        const x = p.x - w / 2;
+        const y = p.y - h;
+
+        // Taxi Flotante Cuántico Amarillo
+        ctx.fillStyle = '#eab308';
+        ctx.fillRect(x, y, w, h * 0.8);
+
+        // Parabrisas
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(x + 4 * scale, y + 4 * scale, w - 8 * scale, h * 0.28);
+
+        // Franja de ajedrez negro tradicional de los taxis bogotanos
+        ctx.fillStyle = '#000000';
+        for (let c = 0; c < w; c += 10 * scale) {
+          ctx.fillRect(x + c, y + h * 0.48, 5 * scale, 5 * scale);
+        }
+
+        // Rótulo TAXI en el techo
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(p.x - 10 * scale, y - 6 * scale, 20 * scale, 6 * scale);
+        ctx.fillStyle = '#000000';
+        ctx.font = `bold ${Math.max(5, Math.floor(6 * scale))}px Orbitron`;
+        ctx.textAlign = 'center';
+        ctx.fillText('TAXI', p.x, y - 1 * scale);
+
+      } else if (obs.type === 'barrier_low') {
+        // Barrera baja de salto
+        const w = 82 * scale;
+        const h = 25 * scale;
+        const x = p.x - w / 2;
+        const y = p.y - h;
+
+        if (drawTrimmedSprite('barrierLow', x, y, w, h)) return;
+
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(x, y, w, h);
+
+        // Rayas amarillas y negras de advertencia
+        ctx.fillStyle = '#ffe600';
+        for (let b = 0; b < w; b += 14 * scale) {
+          ctx.fillRect(x + b, y, 7 * scale, h);
+        }
+
+        // Luz de Neón de Salto
+        ctx.strokeStyle = '#00ff88';
+        ctx.lineWidth = 3 * scale;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + w, y);
+        ctx.stroke();
+
+        ctx.fillStyle = '#00ff88';
+        ctx.font = `bold ${Math.max(6, Math.floor(8 * scale))}px Orbitron`;
+        ctx.textAlign = 'center';
+        ctx.fillText('▲ SALTE', p.x, y - 4 * scale);
+
+      } else if (obs.type === 'barrier_high') {
+        // Barrera alta de deslizamiento (Slide)
+        const w = 74 * scale;
+        const h = 55 * scale;
+        const x = p.x - w / 2;
+        const y = p.y - h;
+
+        if (drawTrimmedSprite('barrierHigh', x, y, w, h)) return;
+
+        // Postes laterales de la barrera
+        ctx.fillStyle = '#334155';
+        ctx.fillRect(x, y, 6 * scale, h);
+        ctx.fillRect(x + w - 6 * scale, y, 6 * scale, h);
+
+        // Viga superior con emisor de escáner láser
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(x, y, w, 16 * scale);
+
+        // Rayo láser escáner rojo de neón a la altura de la cabeza
+        ctx.strokeStyle = 'rgba(255, 0, 85, 0.9)';
+        ctx.lineWidth = 4 * scale;
+        ctx.beginPath();
+        ctx.moveTo(x + 4 * scale, y + 14 * scale);
+        ctx.lineTo(x + w - 4 * scale, y + 14 * scale);
+        ctx.stroke();
+
+        ctx.fillStyle = '#ff0055';
+        ctx.font = `bold ${Math.max(6, Math.floor(8 * scale))}px Orbitron`;
+        ctx.textAlign = 'center';
+        ctx.fillText('▼ DESLICE', p.x, y - 4 * scale);
+      }
+    }
+
+    // Render de Coleccionables (Monedas y Llaves de Hackeo)
+    function renderCollectible(item, time) {
+      if (item.collected) return;
+      const p = project(item.x, item.y, item.z);
+      if (!p) return;
+
+      const scale = p.scale;
+      const rot = item.rotation + time * 4;
+      const coinWidth = Math.abs(Math.cos(rot)) * 22 * scale;
+      const coinHeight = 22 * scale;
+
+      if (item.type === 'coin') {
+        if (loadedImages.coin) {
+          const diameter = 30 * scale;
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.scale(Math.max(0.22, Math.abs(Math.cos(rot))), 1);
+          drawTrimmedSprite('coin', -diameter / 2, -diameter / 2, diameter, diameter);
+          ctx.restore();
+          return;
+        }
+        // Moneda holográfica ₧ Cripto-Pesos
+        ctx.fillStyle = '#ffe600';
+        ctx.beginPath();
+        ctx.ellipse(p.x, p.y, Math.max(2, coinWidth), coinHeight, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5 * scale;
+        ctx.stroke();
+
+        if (coinWidth > 8 * scale) {
+          ctx.fillStyle = '#000000';
+          ctx.font = `bold ${Math.max(7, Math.floor(10 * scale))}px Orbitron`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('₧', p.x, p.y);
+        }
+      } else if (item.type === 'key') {
+        // Llave Dorada de Hackeo
+        ctx.fillStyle = '#00f0ff';
+        ctx.beginPath();
+        ctx.arc(p.x, p.y - 6 * scale, 7 * scale, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillRect(p.x - 2 * scale, p.y - 2 * scale, 4 * scale, 14 * scale);
+        ctx.fillRect(p.x, p.y + 4 * scale, 6 * scale, 3 * scale);
+        ctx.fillRect(p.x, p.y + 9 * scale, 5 * scale, 3 * scale);
+      }
+    }
+
+    function renderSceneReveal(dt) {
+      if (gameState.sceneReveal <= 0) return;
+      const theme = SCENE_THEMES[gameState.currentMission - 1];
+      const opacity = Math.min(1, gameState.sceneReveal);
+      ctx.fillStyle = `rgba(3, 4, 12, ${opacity * 0.7})`;
+      ctx.fillRect(0, 0, viewWidth, viewHeight);
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.fillStyle = theme.edgeLeft;
+      ctx.globalAlpha = opacity;
+      ctx.font = `bold ${Math.min(24, Math.max(14, viewWidth / 27))}px Orbitron, sans-serif`;
+      ctx.fillText(`ZONA 0${gameState.currentMission}`, viewWidth / 2, viewHeight * 0.43);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `bold ${Math.min(15, Math.max(10, viewWidth / 40))}px Orbitron, sans-serif`;
+      ctx.fillText(theme.name, viewWidth / 2, viewHeight * 0.47);
+      ctx.restore();
+      gameState.sceneReveal = Math.max(0, gameState.sceneReveal - dt * 1.2);
+    }
+
+    // Render de Partículas y Textos Flotantes
+    function renderParticlesAndTexts(dt) {
+      // Partículas
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const pt = particles[i];
+        pt.life -= dt;
+        if (pt.life <= 0) {
+          particles.splice(i, 1);
+          continue;
+        }
+        pt.x += pt.vx * dt;
+        pt.y += pt.vy * dt;
+        pt.z += pt.vz * dt;
+
+        const p = project(pt.x, pt.y, pt.z);
+        if (p) {
+          ctx.fillStyle = pt.color;
+          ctx.globalAlpha = pt.life / pt.maxLife;
+          ctx.fillRect(p.x, p.y, 4 * p.scale, 4 * p.scale);
+          ctx.globalAlpha = 1.0;
+        }
+      }
+
+      // Textos flotantes
+      for (let i = floatingTexts.length - 1; i >= 0; i--) {
+        const ft = floatingTexts[i];
+        ft.life -= dt;
+        ft.y += dt * 1.5;
+        if (ft.life <= 0) {
+          floatingTexts.splice(i, 1);
+          continue;
+        }
+        const p = project(ft.x, ft.y, ft.z);
+        if (p) {
+          ctx.fillStyle = ft.color;
+          ctx.font = `bold ${Math.max(9, Math.floor(13 * p.scale))}px Orbitron, sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.globalAlpha = ft.life;
+          ctx.fillText(ft.text, p.x, p.y);
+          ctx.globalAlpha = 1.0;
+        }
+      }
+    }
+
+    // 11. BUCLE PRINCIPAL DE JUEGO (GAME LOOP)
+    let lastTime = performance.now();
+
+    function gameLoop(currentTime) {
+      const dt = Math.min((currentTime - lastTime) / 1000, 0.1);
+      lastTime = currentTime;
+
+      const mediaActive = mediaOverlay.active;
+
+      if (mediaActive) {
+        ctx.clearRect(0, 0, viewWidth, viewHeight);
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, viewWidth, viewHeight);
+        requestAnimationFrame(gameLoop);
+        return;
+      }
+
+      if (gameState.status === 'playing') {
+        const mission = MISSIONS[gameState.currentMission - 1];
+        gameState.gameTime += dt;
+        gameState.roadOffsetZ += gameState.speed * dt;
+        gameState.distance += gameState.speed * dt;
+        gameState.missionDistance += gameState.speed * dt;
+        gameState.missionTime += dt;
+
+        gameState.speed = Math.min(mission.maxSpeed, mission.baseSpeed + (gameState.missionDistance / mission.acceleration));
+
+        // Actualizar jugador y dron
+        player.update(dt);
+        policeDrone.update(dt, gameState.speed);
+
+        // Generar entidades del mundo
+        spawnTimer += dt;
+        const currentSpawnInterval = mission.spawnInterval;
+        if (spawnTimer > currentSpawnInterval) {
+          spawnWorldEntities();
+          spawnTimer = 0;
+        }
+
+        // Mover obstáculos hacia el jugador
+        for (let i = obstacles.length - 1; i >= 0; i--) {
+          const obs = obstacles[i];
+          obs.z -= (gameState.speed + obs.speedRelative) * dt;
+          if (obs.z < -FOV / 10) {
+            obstacles.splice(i, 1);
+          }
+        }
+
+        // Mover coleccionables
+        for (let i = collectibles.length - 1; i >= 0; i--) {
+          const col = collectibles[i];
+          col.z -= gameState.speed * dt;
+          if (col.z < -FOV / 10) {
+            collectibles.splice(i, 1);
+          }
+        }
+
+        // Comprobar colisiones
+        checkCollisions();
+        if (gameState.status === 'playing') checkMissionComplete();
+        if (gameState.status === 'playing') maybeTriggerDangerMedia();
+
+        // Actualizar HUD
+        updateHUD();
+      } else if (gameState.status === 'idle') {
+        // Movimiento ambiental en la pantalla de inicio
+        gameState.gameTime += dt;
+        gameState.roadOffsetZ += 12 * dt;
+      }
+
+      // RENDERIZADO DEL FRAME
+      ctx.clearRect(0, 0, viewWidth, viewHeight);
+
+      // 1. Fondo Skyline Bogotá
+      renderSkyline(gameState.gameTime);
+
+      // 2. Autopista 3D
+      renderHighway(gameState.roadOffsetZ);
+
+      // 3. Ordenar entidades por profundidad Z (Pintor: lo más lejano se dibuja primero)
+      const renderList = [];
+      obstacles.forEach(o => renderList.push({ type: 'obstacle', data: o, z: o.z }));
+      collectibles.forEach(c => renderList.push({ type: 'collectible', data: c, z: c.z }));
+      renderList.push({ type: 'player', z: 0 });
+
+      renderList.sort((a, b) => b.z - a.z);
+
+      renderList.forEach(item => {
+        if (item.type === 'obstacle') renderObstacle(item.data);
+        else if (item.type === 'collectible') renderCollectible(item.data, gameState.gameTime);
+        else if (item.type === 'player') renderPlayer(gameState.gameTime);
+      });
+
+      // 4. Dron policial (vuela arriba/detrás)
+      renderPoliceDrone(gameState.gameTime);
+
+      // 5. Partículas y textos
+      renderParticlesAndTexts(dt);
+      renderSceneReveal(dt);
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    requestAnimationFrame(gameLoop);
+
+    // 12. ACTUALIZACIÓN DEL HUD EN PANTALLA
+    function updateHUD() {
+      updateMissionHUD();
+      document.getElementById('hudDistance').innerText = Math.floor(gameState.distance);
+      document.getElementById('hudSpeed').innerText = Math.floor(gameState.speed * 3.6);
+      document.getElementById('hudCoins').innerText = gameState.coins;
+      document.getElementById('hudKeys').innerText = gameState.hackKeys;
+
+      // Barra de proximidad del Dron
+      const dronePct = Math.floor(policeDrone.dangerLevel * 100);
+      document.getElementById('hudDroneBar').style.width = dronePct + '%';
+      
+      const droneStatusEl = document.getElementById('hudDroneStatus');
+      const droneAlertEl = document.getElementById('hudDroneAlert');
+
+      if (dronePct > 70) {
+        droneStatusEl.innerText = '¡PERSECUCIÓN INMINENTE!';
+        droneStatusEl.className = 'text-[9px] font-mono text-rose-400 font-bold';
+        droneAlertEl.classList.add('drone-alert-active');
+      } else if (dronePct > 40) {
+        droneStatusEl.innerText = 'OBJETIVO EN LA MIRA';
+        droneStatusEl.className = 'text-[9px] font-mono text-amber-300';
+        droneAlertEl.classList.remove('drone-alert-active');
+      } else {
+        droneStatusEl.innerText = 'VIGILANCIA DISTANTE';
+        droneStatusEl.className = 'text-[9px] font-mono text-neutral-300';
+        droneAlertEl.classList.remove('drone-alert-active');
+      }
+    }
+
+    function updateMissionHUD() {
+      const mission = MISSIONS[gameState.currentMission - 1];
+      const theme = SCENE_THEMES[gameState.currentMission - 1];
+      document.getElementById('hudMissionName').textContent = `MISIÓN ${mission.number} · ${mission.shortTitle}`;
+      document.getElementById('hudMissionName').style.color = theme.edgeLeft;
+      document.getElementById('hudMissionPanel').style.borderColor = theme.edgeLeft;
+      document.getElementById('hudMissionBar').style.background = `linear-gradient(90deg, ${theme.edgeLeft}, ${theme.edgeRight})`;
+      let progress;
+      let objective;
+      if (mission.number === 1) {
+        const actions = gameState.tutorialActions;
+        objective = !actions.lane ? 'Cambia de carril: A/D, flechas o botones ◀ ▶.'
+          : !actions.jump ? 'Salta: W, espacio, ↑ o botón SALTO.'
+          : !actions.slide ? 'Deslízate: S, ↓ o botón SLIDE.'
+          : '¡Controles aprendidos! Llega a los 500 m.';
+        progress = Math.min(1, gameState.missionDistance / mission.distanceGoal);
+        document.getElementById('hudMissionProgress').textContent = `${Math.min(mission.distanceGoal, Math.floor(gameState.missionDistance))} / ${mission.distanceGoal} m`;
+      } else if (mission.number === 2) {
+        objective = 'Esquiva el tráfico y las barreras hasta la salida.';
+        progress = Math.min(1, gameState.missionDistance / mission.distanceGoal);
+        document.getElementById('hudMissionProgress').textContent = `${Math.min(mission.distanceGoal, Math.floor(gameState.missionDistance))} / ${mission.distanceGoal} m`;
+      } else {
+        objective = 'Sobrevive a la persecución y al tráfico intenso.';
+        progress = Math.min(1, gameState.missionTime / mission.duration);
+        document.getElementById('hudMissionProgress').textContent = `${Math.min(mission.duration, Math.floor(gameState.missionTime))} / ${mission.duration} s`;
+      }
+      document.getElementById('hudMissionObjective').textContent = objective;
+      document.getElementById('hudMissionBar').style.width = `${progress * 100}%`;
+    }
+
+    function checkMissionComplete() {
+      const mission = MISSIONS[gameState.currentMission - 1];
+      if (mission.number === 1) {
+        const actions = gameState.tutorialActions;
+        if (gameState.missionDistance < mission.distanceGoal || !actions.lane || !actions.jump || !actions.slide) return;
+      } else if (mission.number === 2) {
+        if (gameState.missionDistance < mission.distanceGoal) return;
+      } else if (gameState.missionTime < mission.duration) {
+        return;
+      }
+      completeMission();
+    }
+
+    function completeMission() {
+      if (gameState.status !== 'playing') return;
+      const missionNumber = gameState.currentMission;
+      gameState.status = missionNumber === 3 ? 'victory' : 'transition';
+      gameState.missionsCompleted += 1;
+      gameState.unlockedMission = Math.max(gameState.unlockedMission, Math.min(3, missionNumber + 1));
+      selectedMission = Math.min(3, missionNumber + 1);
+      recordRunProgress();
+      void syncPlayerStats('misión-completada');
+      obstacles = [];
+      collectibles = [];
+      if (missionNumber === 3) triggerEscapeMedia();
+      else showMissionModal(false);
+    }
+
+    function showMissionModal(finalVictory) {
+      const mission = MISSIONS[gameState.currentMission - 1];
+      document.getElementById('missionModalKicker').textContent = finalVictory ? 'ESCAPE COMPLETADO' : `MISIÓN ${mission.number} COMPLETADA`;
+      document.getElementById('missionModalTitle').textContent = finalVictory ? '¡BOGOTÁ ES LIBRE!' : `${mission.shortTitle} SUPERADA`;
+      document.getElementById('missionModalDescription').textContent = finalVictory
+        ? `Sobreviviste ${mission.duration} segundos a la batalla final. Las tres misiones están superadas.`
+        : `Desbloqueaste la misión ${mission.number + 1}: ${MISSIONS[mission.number].title}.`;
+      document.getElementById('btnNextMission').textContent = finalVictory ? 'REPETIR MISIÓN 3' : `CONTINUAR A MISIÓN ${mission.number + 1}`;
+      document.getElementById('missionModal').classList.remove('hidden');
+    }
+
+    // 13. SISTEMA DE RESURRECCIÓN E INFLACIÓN HACKER (MODAL)
+    function stopResurrectCountdown() {
+      if (gameState.resurrectTimerId !== null) {
+        clearInterval(gameState.resurrectTimerId);
+        gameState.resurrectTimerId = null;
+      }
+    }
+
+    function openGameOverModal() {
+      document.getElementById('gameOverCause').innerText = gameState.gameOverCause;
+      document.getElementById('goDistance').innerText = Math.floor(gameState.distance) + ' m';
+      document.getElementById('goCoins').innerText = gameState.coins + ' ₧';
+      document.getElementById('goHighScore').innerText = gameState.highScore + ' m';
+      document.getElementById('goTotalKeys').innerText = gameState.hackKeys;
+
+      const cost = gameState.resurrectCost;
+      document.getElementById('resurrectKeyCost').innerText = cost;
+      document.getElementById('btnResurrectKeys').innerText = cost;
+
+      const btnRes = document.getElementById('btnResurrect');
+      if (gameState.hackKeys >= cost) {
+        btnRes.disabled = false;
+        btnRes.className = 'w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-teal-500 hover:from-cyan-400 text-neutral-950 font-cyber font-black text-sm tracking-wider shadow-lg shadow-cyan-500/30 transition-transform active:scale-95 cursor-pointer';
+        btnRes.innerText = `REVIVIR (${cost} ${cost === 1 ? 'LLAVE' : 'LLAVES'})`;
+      } else {
+        btnRes.disabled = true;
+        btnRes.className = 'w-full py-2.5 px-4 rounded-xl bg-neutral-800 text-neutral-500 font-cyber font-bold text-xs tracking-wider cursor-not-allowed';
+        btnRes.innerText = `SIN LLAVES SUFICIENTES (${gameState.hackKeys}/${cost})`;
+      }
+
+      // Temporizador de 5 segundos para revivir
+      gameState.resurrectTimer = 5.0;
+      document.getElementById('resurrectTimer').innerText = '5.0s';
+      document.getElementById('resurrectTimerBar').style.width = '100%';
+      document.getElementById('resurrectSection').classList.remove('hidden');
+
+      stopResurrectCountdown();
+
+      gameState.resurrectTimerId = setInterval(() => {
+        gameState.resurrectTimer -= 0.1;
+        if (gameState.resurrectTimer <= 0) {
+          stopResurrectCountdown();
+          gameState.resurrectTimer = 0;
+          document.getElementById('resurrectSection').classList.add('hidden');
+        }
+        document.getElementById('resurrectTimer').innerText = Math.max(0, gameState.resurrectTimer).toFixed(1) + 's';
+        document.getElementById('resurrectTimerBar').style.width = ((gameState.resurrectTimer / 5.0) * 100) + '%';
+      }, 100);
+
+      document.getElementById('gameOverModal').classList.remove('hidden');
+    }
+
+    function executeResurrect() {
+      const cost = gameState.resurrectCost;
+      if (gameState.status !== 'gameover' || gameState.resurrectTimer <= 0 ||
+          document.getElementById('resurrectSection').classList.contains('hidden') ||
+          gameState.hackKeys < cost) return;
+
+      stopResurrectCountdown();
+      gameState.resurrectTimer = 0;
+      gameState.hackKeys -= cost;
+      gameState.resurrectionCount += 1;
+      saveWalletLocally();
+
+      // Limpiar obstáculos cercanos en z
+      obstacles = obstacles.filter(o => o.z > 25);
+
+      // Reiniciar dron a distancia segura
+      policeDrone.zDistance = policeDrone.maxDistance;
+      player.invulnerableTime = 3.5; // 3.5 segundos de escudo invulnerable
+      player.y = 0;
+      player.vy = 0;
+      player.isGrounded = true;
+      player.isSliding = false;
+      player.slideTimeRemaining = 0;
+
+      audio.playKey();
+      document.getElementById('gameOverModal').classList.add('hidden');
+      gameState.status = 'playing';
+      document.getElementById('gameHUD').classList.remove('hidden');
+      updateHUD();
+      addFloatingText('¡HACK EXITOSO: REVIVIDO!', player.currentX, 2, 0, '#00f0ff');
+    }
+
+    function startMission(missionNumber, continueRun = false) {
+      audio.init();
+      audio.startSynthwaveMusic();
+      stopResurrectCountdown();
+      gameState.resurrectTimer = 0;
+      gameOverSequenceActive = false;
+      const mission = MISSIONS[missionNumber - 1];
+
+      gameState.status = 'playing';
+      gameState.currentMission = missionNumber;
+      gameState.missionDistance = 0;
+      gameState.missionTime = 0;
+      gameState.sceneReveal = 1;
+      gameState.tutorialActions = { lane: false, jump: false, slide: false };
+      gameState.distance = continueRun ? gameState.distance : mission.startDistance;
+      gameState.speed = mission.baseSpeed;
+      gameState.baseSpeed = mission.baseSpeed;
+      gameState.maxSpeed = mission.maxSpeed;
+      if (!continueRun) {
+        gameState.coins = 0;
+        gameState.resurrectionCount = 0;
+      }
+      gameState.resurrectCost = 1;
+      player.lane = 0;
+      player.currentX = 0;
+      player.y = 0;
+      player.vy = 0;
+      player.isGrounded = true;
+      player.isSliding = false;
+      player.slideTimeRemaining = 0;
+      player.invulnerableTime = 1.0;
+      policeDrone.zDistance = 16.0;
+
+      obstacles = [];
+      collectibles = [];
+      particles = [];
+      floatingTexts = [];
+      spawnTimer = 0;
+      lastDangerMediaTrigger = performance.now();
+
+      document.getElementById('startScreen').classList.add('hidden');
+      document.getElementById('gameOverModal').classList.add('hidden');
+      document.getElementById('pauseModal').classList.add('hidden');
+      document.getElementById('missionModal').classList.add('hidden');
+      document.getElementById('gameHUD').classList.remove('hidden');
+      updateHUD();
+    }
+
+    function startNewGame() {
+      startMission(selectedMission);
+    }
+
+    let lastDangerMediaTrigger = 0;
+    let lastIntroScenePlayed = false;
+    let gameOverSequenceActive = false;
+
+    function playStartIntroSequence() {
+      if (lastIntroScenePlayed) return;
+      lastIntroScenePlayed = true;
+      mediaOverlay.active = true;
+      showMediaScene('image', {
+        src: ASSETS.images.intro,
+        caption: 'BOGOTÁ 2080',
+        duration: 2200,
+        onComplete: () => {
+          showMediaScene('video', {
+            src: ASSETS.videos.intro,
+            caption: 'CONTROL TOTAL DE LA CIUDAD',
+            duration: 0,
+            onComplete: () => {
+              startNewGame();
+            }
+          });
+        }
+      });
+    }
+
+    function maybeTriggerDangerMedia() {
+      if (gameState.status !== 'playing') return;
+      const danger = policeDrone.dangerLevel;
+      const now = performance.now();
+      if (danger > 0.72 && now - lastDangerMediaTrigger > 15000) {
+        lastDangerMediaTrigger = now;
+        addFloatingText('¡DRON POL-METRO EN SEGUIMIENTO!', player.currentX, 3, 0, '#ff5072');
+      }
+    }
+
+    function triggerGameOverMedia() {
+      if (gameOverSequenceActive) return;
+      if (gameState.status !== 'playing' && gameState.status !== 'gameover') return;
+
+      gameOverSequenceActive = true;
+      gameState.status = 'gameover';
+
+      showMediaScene('video', {
+        src: ASSETS.videos.gameOver,
+        caption: 'CAPTURA EN BOGOTÁ',
+        duration: 0,
+        onComplete: () => {
+          finishGameOverSequence();
+        }
+      });
+
+      setTimeout(() => {
+        if (gameOverSequenceActive && mediaOverlay.video.readyState <= 1 && mediaOverlay.video.paused) {
+          finishGameOverSequence();
+        }
+      }, 2600);
+    }
+
+    function triggerEscapeMedia() {
+      showMediaScene('video', {
+        src: ASSETS.videos.escape,
+        caption: 'ESCAPE EXITOSO',
+        duration: 0,
+        onComplete: () => {
+          showMissionModal(true);
+        }
+      });
+    }
+
+    // 14. EVENTOS DE INTERFAZ Y CONTROLES
+    document.getElementById('btnStartGame').addEventListener('click', async () => {
+      // Registra el gesto antes de la cinemática y habilita el audio del vídeo.
+      audio.init();
+      if (!await loadOrCreatePlayerProfile()) return;
+      lastIntroScenePlayed = false;
+      gameState.status = 'idle';
+      document.getElementById('startScreen').classList.add('hidden');
+      document.getElementById('gameHUD').classList.add('hidden');
+      document.getElementById('gameOverModal').classList.add('hidden');
+      document.getElementById('pauseModal').classList.add('hidden');
+      mediaOverlay.active = true;
+      playStartIntroSequence();
+    });
+    document.getElementById('btnRestartGame').addEventListener('click', () => {
+      startMission(gameState.currentMission);
+    });
+    document.getElementById('btnNextMission').addEventListener('click', () => {
+      if (gameState.status !== 'transition' && gameState.status !== 'victory') return;
+      const finalVictory = gameState.currentMission === 3;
+      startMission(finalVictory ? 3 : gameState.currentMission + 1, !finalVictory);
+    });
+    document.getElementById('btnMissionMenu').addEventListener('click', () => {
+      gameState.status = 'idle';
+      document.getElementById('missionModal').classList.add('hidden');
+      document.getElementById('gameHUD').classList.add('hidden');
+      document.getElementById('startScreen').classList.remove('hidden');
+      renderMissionSelector();
+      audio.stopSynthwaveMusic();
+    });
+
+    const nicknameInput = document.getElementById('nicknameInput');
+    const savedNickname = localStorage.getItem('cyberrun_nickname') || '';
+    nicknameInput.value = savedNickname;
+    updateProfileUI();
+
+    document.getElementById('btnLoadProfile').addEventListener('click', async () => {
+      await loadOrCreatePlayerProfile(true);
+    });
+    nicknameInput.addEventListener('change', () => {
+      void loadOrCreatePlayerProfile(true);
+    });
+    nicknameInput.addEventListener('input', () => {
+      if (normalizeNickname(nicknameInput.value) !== playerProfile.nickname) {
+        playerProfile.id = null;
+        setProfileStatus('Pulsa CARGAR para sincronizar', 'text-neutral-500');
+      }
+    });
+    nicknameInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        void loadOrCreatePlayerProfile(true);
+      }
+    });
+
+    document.getElementById('btnResurrect').addEventListener('click', executeResurrect);
+
+    // Controles táctiles en pantalla
+    document.getElementById('btnTouchLeft').addEventListener('pointerdown', (e) => { e.preventDefault(); player.moveLeft(); });
+    document.getElementById('btnTouchRight').addEventListener('pointerdown', (e) => { e.preventDefault(); player.moveRight(); });
+    document.getElementById('btnTouchJump').addEventListener('pointerdown', (e) => { e.preventDefault(); player.jump(); });
+    document.getElementById('btnTouchSlide').addEventListener('pointerdown', (e) => { e.preventDefault(); player.slide(); });
+
+    // Modales Ficha Técnica y Tienda
+    function updateShopUI() {
+      document.getElementById('shopKeyCountLabel').innerText = gameState.hackKeys;
+      document.getElementById('shopWalletCoins').innerText = gameState.totalCoins;
+      document.getElementById('shopWalletKeys').innerText = gameState.hackKeys;
+    }
+
+    document.getElementById('btnOpenFicha').addEventListener('click', () => {
+      document.getElementById('fichaModal').classList.remove('hidden');
+    });
+    document.getElementById('btnCloseFicha').addEventListener('click', () => {
+      document.getElementById('fichaModal').classList.add('hidden');
+    });
+    document.getElementById('btnCloseFichaFooter').addEventListener('click', () => {
+      document.getElementById('fichaModal').classList.add('hidden');
+    });
+    document.getElementById('btnGoToFicha').addEventListener('click', () => {
+      document.getElementById('fichaModal').classList.remove('hidden');
+    });
+
+    document.getElementById('btnOpenShop').addEventListener('click', () => {
+      updateShopUI();
+      document.getElementById('shopModal').classList.remove('hidden');
+    });
+    document.getElementById('btnGoToShop').addEventListener('click', () => {
+      updateShopUI();
+      document.getElementById('shopModal').classList.remove('hidden');
+    });
+    document.getElementById('btnCloseShop').addEventListener('click', () => {
+      document.getElementById('shopModal').classList.add('hidden');
+    });
+    document.getElementById('btnCloseShopFooter').addEventListener('click', () => {
+      document.getElementById('shopModal').classList.add('hidden');
+    });
+
+    document.getElementById('btnOpenRanking').addEventListener('click', () => {
+      document.getElementById('rankingModal').classList.remove('hidden');
+      startSchoolRanking();
+    });
+    function closeSchoolRanking() {
+      document.getElementById('rankingModal').classList.add('hidden');
+      stopSchoolRanking();
+    }
+    document.getElementById('btnCloseRanking').addEventListener('click', closeSchoolRanking);
+    document.getElementById('btnCloseRankingFooter').addEventListener('click', closeSchoolRanking);
+
+    // Compras en Tienda
+    document.getElementById('btnBuyKey1').addEventListener('click', () => {
+      if (gameState.totalCoins >= 50) {
+        gameState.totalCoins -= 50;
+        gameState.hackKeys += 1;
+        saveWalletLocally();
+        audio.playKey();
+        updateShopUI();
+      } else {
+        alert('Cripto-Pesos insuficientes (necesitas 50 ₧). ¡Sigue corriendo para recolectar!');
+      }
+    });
+
+    document.getElementById('btnBuyKey3').addEventListener('click', () => {
+      if (gameState.totalCoins >= 125) {
+        gameState.totalCoins -= 125;
+        gameState.hackKeys += 3;
+        saveWalletLocally();
+        audio.playKey();
+        updateShopUI();
+      } else {
+        alert('Cripto-Pesos insuficientes (necesitas 125 ₧). ¡Sigue corriendo para recolectar!');
+      }
+    });
+
+    document.getElementById('btnBuyShield').addEventListener('click', () => {
+      if (gameState.totalCoins >= 80) {
+        gameState.totalCoins -= 80;
+        gameState.hasShield = true;
+        saveWalletLocally();
+        audio.playKey();
+        updateShopUI();
+        alert('¡Escudo EMP comprado! Te protegerá de tu próxima colisión.');
+      } else {
+        alert('Cripto-Pesos insuficientes (necesitas 80 ₧).');
+      }
+    });
+
+    // Silenciar Audio
+    function toggleAudio() {
+      const muted = audio.toggleMute();
+      mediaOverlay.video.muted = muted;
+      mediaOverlay.video.volume = muted ? 0 : 1;
+      const text = muted ? '🔇 Sonido: OFF' : '🔊 Sonido: ON';
+      document.getElementById('btnToggleMuteStart').innerText = text;
+      document.getElementById('btnHudMute').innerText = muted ? '🔇' : '🔊';
+    }
+    document.getElementById('btnToggleMuteStart').addEventListener('click', toggleAudio);
+    document.getElementById('btnHudMute').addEventListener('click', toggleAudio);
+
+    // Pausa
+    document.getElementById('btnHudPause').addEventListener('click', () => {
+      if (gameState.status === 'playing') {
+        gameState.status = 'paused';
+        document.getElementById('pauseModal').classList.remove('hidden');
+      }
+    });
+    document.getElementById('btnResumeGame').addEventListener('click', () => {
+      if (gameState.status === 'paused') {
+        gameState.status = 'playing';
+        document.getElementById('pauseModal').classList.add('hidden');
+      }
+    });
+    document.getElementById('btnQuitToStart').addEventListener('click', () => {
+      if (gameState.status !== 'paused') return;
+      recordRunProgress();
+      void syncPlayerStats('salida');
+      gameState.status = 'idle';
+      document.getElementById('pauseModal').classList.add('hidden');
+      document.getElementById('gameHUD').classList.add('hidden');
+      document.getElementById('startScreen').classList.remove('hidden');
+      audio.stopSynthwaveMusic();
+    });
+
+    // 15. GESTIÓN DE ENTRADAS DEL TECLADO
+    window.addEventListener('keydown', (e) => {
+      const target = e.target;
+      const isTypingField = target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        target.isContentEditable;
+
+      // Nunca capturar las teclas de movimiento mientras se escribe un perfil
+      // u otro campo editable de la interfaz.
+      if (isTypingField) return;
+      if (e.repeat) return;
+
+      if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
+        e.preventDefault();
+        player.moveLeft();
+      } else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
+        e.preventDefault();
+        player.moveRight();
+      } else if (e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'Space') {
+        e.preventDefault();
+        player.jump();
+      } else if (e.code === 'ArrowDown' || e.code === 'KeyS') {
+        e.preventDefault();
+        player.slide();
+      } else if (e.code === 'KeyP') {
+        e.preventDefault();
+        if (gameState.status === 'playing') {
+          gameState.status = 'paused';
+          document.getElementById('pauseModal').classList.remove('hidden');
+        } else if (gameState.status === 'paused') {
+          gameState.status = 'playing';
+          document.getElementById('pauseModal').classList.add('hidden');
+        }
+      }
+    });
+
+    // 16. GESTIÓN DE GESTOS TÁCTILES SWIPE (MÓVILES Y PANTALLAS TÁCTILES)
+    let touchStartX = 0;
+    let touchStartY = 0;
+
+    window.addEventListener('touchstart', (e) => {
+      if (e.touches.length > 0) {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+      }
+    }, { passive: true });
+
+    window.addEventListener('touchend', (e) => {
+      if (e.changedTouches.length === 0) return;
+      const dx = e.changedTouches[0].clientX - touchStartX;
+      const dy = e.changedTouches[0].clientY - touchStartY;
+      const absDx = Math.abs(dx);
+      const absDy = Math.abs(dy);
+      const minDistance = 25;
+
+      if (Math.max(absDx, absDy) > minDistance) {
+        if (absDx > absDy) {
+          if (dx > 0) player.moveRight();
+          else player.moveLeft();
+        } else {
+          if (dy > 0) player.slide();
+          else player.jump();
+        }
+      }
+    }, { passive: true });
+
+    // Inicializar contadores en interfaz
+    updateShopUI();
+  </script>
+</body>
+</html>
